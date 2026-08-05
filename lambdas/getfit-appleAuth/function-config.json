@@ -1,0 +1,19 @@
+{
+  "FunctionName": "getfit-appleAuth",
+  "Runtime": "python3.12",
+  "Handler": "lambda_function.lambda_handler",
+  "Role": "arn:aws:iam::446100759389:role/GetFitLambdaRole",
+  "Timeout": 15,
+  "MemorySize": 256,
+  "Architectures": [
+    "x86_64"
+  ],
+  "Environment": {
+    "Variables": {
+      "POOL_ID": "us-east-1_zYTdHaJfo",
+      "BUNDLE_ID": "com.gregnieratka.GET-FIT"
+    }
+  },
+  "CodeSha256": "9AqSxSzYlZcKl0ui8ddzli5c5Nkw17TG1TT3YmCCEI8=",
+  "LastModified": "2026-07-24T23:42:54.000+0000"
+}

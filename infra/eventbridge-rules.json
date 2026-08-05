@@ -1,0 +1,23 @@
+[
+    {
+        "Name": "getfit-daily-delivery",
+        "Arn": "arn:aws:events:us-east-1:446100759389:rule/getfit-daily-delivery",
+        "State": "ENABLED",
+        "ScheduleExpression": "cron(0 9 * * ? *)",
+        "EventBusName": "default"
+    },
+    {
+        "Name": "getfit-notification-sweep",
+        "Arn": "arn:aws:events:us-east-1:446100759389:rule/getfit-notification-sweep",
+        "State": "ENABLED",
+        "ScheduleExpression": "rate(15 minutes)",
+        "EventBusName": "default"
+    },
+    {
+        "Name": "getfit-wod-daily",
+        "Arn": "arn:aws:events:us-east-1:446100759389:rule/getfit-wod-daily",
+        "State": "ENABLED",
+        "ScheduleExpression": "cron(0 10 * * ? *)",
+        "EventBusName": "default"
+    }
+]

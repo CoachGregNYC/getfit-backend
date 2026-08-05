@@ -1,0 +1,13 @@
+{
+  "FunctionName": "getfit-wod",
+  "Runtime": "python3.12",
+  "Handler": "lambda_function.lambda_handler",
+  "Role": "arn:aws:iam::446100759389:role/GetFitLambdaRole",
+  "Timeout": 30,
+  "MemorySize": 256,
+  "Architectures": [
+    "x86_64"
+  ],
+  "CodeSha256": "L/fRu+A6ojYFhkM4/yoltBnK8xZvQ9x8CS9NtlO8L4U=",
+  "LastModified": "2026-08-05T12:41:09.000+0000"
+}

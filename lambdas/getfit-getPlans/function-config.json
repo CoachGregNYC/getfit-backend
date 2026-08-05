@@ -1,0 +1,13 @@
+{
+  "FunctionName": "getfit-getPlans",
+  "Runtime": "python3.12",
+  "Handler": "lambda_function.lambda_handler",
+  "Role": "arn:aws:iam::446100759389:role/GetFitLambdaRole",
+  "Timeout": 10,
+  "MemorySize": 256,
+  "Architectures": [
+    "x86_64"
+  ],
+  "CodeSha256": "lVjuCU6WdVHkJlAZ3PxllpOrjssj+hKHCp0RC17hmfk=",
+  "LastModified": "2026-07-10T00:03:08.000+0000"
+}

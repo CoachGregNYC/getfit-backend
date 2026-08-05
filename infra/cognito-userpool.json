@@ -1,0 +1,26 @@
+{
+    "Id": "us-east-1_zYTdHaJfo",
+    "Name": "getfit-users",
+    "Policies": {
+        "PasswordPolicy": {
+            "MinimumLength": 8,
+            "RequireUppercase": true,
+            "RequireLowercase": true,
+            "RequireNumbers": true,
+            "RequireSymbols": false,
+            "TemporaryPasswordValidityDays": 7
+        },
+        "SignInPolicy": {
+            "AllowedFirstAuthFactors": [
+                "PASSWORD"
+            ]
+        }
+    },
+    "Schema": null,
+    "LambdaConfig": {
+        "DefineAuthChallenge": "arn:aws:lambda:us-east-1:446100759389:function:getfit-appleAuth",
+        "CreateAuthChallenge": "arn:aws:lambda:us-east-1:446100759389:function:getfit-appleAuth",
+        "VerifyAuthChallengeResponse": "arn:aws:lambda:us-east-1:446100759389:function:getfit-appleAuth"
+    },
+    "MfaConfiguration": "OFF"
+}

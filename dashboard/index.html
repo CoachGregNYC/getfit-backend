@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GET FIT — Coach Dashboard</title>
+<style>
+:root{--navy:#1B2A4A;--steel:#3E6391;--ice:#AEC3DC;--icet:#C9D8E8;--surf:#EEF1F4;--slate:#5B6B82;}
+*{box-sizing:border-box;margin:0;font-family:-apple-system,Helvetica,Arial,sans-serif}
+body{background:var(--surf);color:var(--navy)}
+header{background:var(--navy);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+header h1{font-size:20px}header .sub{color:var(--ice);font-size:12px}
+nav button{margin-left:8px}
+button{background:var(--steel);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer}
+button.ghost{background:var(--icet);color:var(--navy)}
+button.danger{background:#F3D9D9;color:#8B2E2E}
+button.nav-on{background:#fff;color:var(--navy)}
+input,select,textarea{padding:8px;border:1px solid var(--ice);border-radius:8px;font-size:14px;background:#fff;color:var(--navy)}
+textarea{width:100%;min-height:110px;font-family:inherit;resize:vertical}
+.wrap{max-width:1200px;margin:20px auto;padding:0 16px}
+.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(27,42,74,.08);margin-bottom:16px}
+#login{max-width:380px;margin:80px auto}
+#login h2{margin-bottom:12px}#login input{width:100%;margin-bottom:10px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px}
+#cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.dhead{font-size:11px;color:var(--slate);text-align:center;font-weight:700}
+.day{min-height:96px;background:#fff;border:1px solid var(--icet);border-radius:10px;padding:4px;font-size:11px;cursor:pointer}
+.day.other{opacity:.35;cursor:default}.day.dragover{background:var(--icet)}
+.day.today{border:2px solid var(--navy);box-shadow:0 0 0 1px var(--navy) inset}
+.dayadd{float:right;background:none;border:0;color:var(--ice);font-weight:900;cursor:pointer;padding:0 3px;font-size:14px;line-height:1}
+.day:hover .dayadd{color:var(--steel)}
+.dnum{font-weight:700;color:var(--slate);font-size:11px;margin-bottom:2px}
+.sess{border-radius:6px;padding:3px 5px;margin-bottom:3px;color:#fff;cursor:grab;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.st{float:right;font-weight:900}
+.st.done{color:#4ADE80}.st.miss{color:#F87171}
+.chips{display:flex;gap:6px}.chip{width:34px;height:34px;border-radius:50%;border:1px solid var(--ice);background:#fff;color:var(--navy);cursor:pointer;font-size:12px}
+.chip.on{background:var(--steel);color:#fff;border-color:var(--steel)}
+#modal{position:fixed;inset:0;background:rgba(27,42,74,.5);display:none;align-items:center;justify-content:center;padding:16px}
+#modal .card{max-width:560px;width:100%;max-height:85vh;overflow:auto}
+pre{white-space:pre-wrap;background:var(--surf);border-radius:8px;padding:10px;font-size:13px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;color:#fff}
+.muted{color:var(--slate);font-size:12px}
+.err{color:#C0392B;font-size:12px}
+h3{margin-bottom:8px}
+#dropzone{border:2px dashed var(--steel);border-radius:12px;padding:34px;text-align:center;color:var(--slate);transition:.15s}
+#dropzone.hot{background:var(--icet);color:var(--navy)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:8px;border-bottom:1px solid var(--icet);text-align:left}
+.code{font-family:monospace;font-size:20px;letter-spacing:3px;background:var(--surf);padding:8px 14px;border-radius:8px}
+.prof{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:13px;margin-top:10px;background:var(--surf);border-radius:10px;padding:12px 16px;max-width:560px}
+.prof b{color:var(--slate);font-weight:600}
+#libHead th{cursor:pointer;user-select:none;white-space:nowrap}
+.achip{padding:8px 16px;border-radius:20px;background:#fff;border:1px solid var(--ice);cursor:pointer;color:var(--navy);font-size:14px;font-weight:600}
+.achip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.res{border-bottom:1px solid var(--icet);padding:10px 0}
+.res:last-child{border-bottom:0}
+#calzone{display:flex;gap:16px;align-items:flex-start}
+#calcol{flex:1 1 70%;min-width:0}
+#panel{flex:0 0 30%;min-width:300px;max-width:440px;display:none;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+#panel textarea{min-height:260px;font-size:14px;line-height:1.45}
+#panel h3{padding-right:24px}
+.panelx{float:right;background:none;border:0;color:var(--slate);font-size:20px;cursor:pointer;padding:0 4px}
+.sess.sel{outline:2px solid var(--navy);outline-offset:1px}
+@media(max-width:900px){#calzone{flex-direction:column}#panel{flex:1 1 auto;width:100%;max-width:none;min-width:0;position:static;max-height:none}}
+
+.abar{display:none;position:sticky;top:0;z-index:50;background:var(--navy);color:#fff;
+  padding:10px 18px;border-radius:12px;margin-bottom:14px;align-items:center;gap:14px}
+.abar button{background:#fff;color:var(--navy);border:0;border-radius:8px;padding:6px 14px;
+  font-weight:700;cursor:pointer}
+.abar .aname{font-size:17px;font-weight:800}
+.abar .asub{opacity:.75;font-size:13px}
+body.athlete-mode .abar{display:flex}
+
+.thumbs{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.thumb{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid #ddd;
+  cursor:pointer;background:#f0f0f0}
+.thumb:hover{opacity:.85}
+.thumb.pending{animation:thpulse 1.2s ease-in-out infinite}
+@keyframes thpulse{0%,100%{opacity:.45}50%{opacity:.8}}
+body.feed-mode .thumb{width:96px;height:96px}
+body.feed-mode .card{display:none}
+body.feed-mode .card.feedcard{display:block}
+body.feed-mode .abar{display:flex}
+@media (max-width:640px){
+  body.feed-mode{padding:8px}
+  body.feed-mode .card.feedcard{margin:0;border-radius:10px}
+  body.feed-mode .res{font-size:15px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>GET FIT</h1><div class="sub">Coach Dashboard</div></div>
+  <nav id="topnav" style="display:none">
+    <button id="navCal" class="nav-on" onclick="show('cal')">Calendar</button>
+    <button id="navProg" onclick="show('prog')">Programs</button>
+    <span id="who" class="sub" style="margin-left:14px"></span>
+  </nav>
+</header>
+
+<div class="wrap">
+  <div id="login" class="card">
+    <h2>Coach Sign In</h2>
+    <input id="u" placeholder="Username" value="coachgreg">
+    <input id="p" type="password" placeholder="Password">
+    <button onclick="signIn()">Sign In</button>
+    <div id="lerr" class="err"></div>
+  </div>
+
+  <div id="view-cal" style="display:none">
+    <div class="card">
+      <div class="row">
+        <label>Athlete:</label>
+        <select id="athlete" onchange="athleteChanged()" style="display:none"></select>
+        <span id="athleteChips" class="row"></span>
+        <button class="ghost" onclick="openAddAthlete()">+ Add Athlete</button>
+        <button class="ghost" id="reinvBtn" style="display:none" onclick="newInvite()">New invite code</button>
+        <button class="danger" id="archBtn" style="display:none" onclick="archiveCurrent()">Archive athlete</button>
+        <button class="danger" id="delBtn" style="display:none" onclick="openDeleteAthlete(athlete.value)">Delete athlete</button>
+        <span class="muted" id="acount"></span>
+        <span class="err" id="aerr"></span>
+      </div>
+      <div id="profCard" style="display:none"></div>
+      <div id="archRow" class="muted" style="margin-top:6px"></div>
+    </div>
+    <div class="card">
+      <h3>Assign a Program</h3>
+      <div class="row">
+        <select id="planSel" onchange="planChanged()"></select>
+        <select id="assignMode" onchange="assignModeChanged()">
+          <option value="start">Start on date</option>
+          <option value="race">Finish on race day</option>
+        </select>
+        <label id="dateLbl">Start:</label><input type="date" id="startDate" onchange="raceEst()">
+        <input id="raceNameIn" placeholder="Race name (e.g. NYC Marathon)" style="min-width:180px;display:none">
+        <span id="raceHint" class="muted"></span>
+        <span id="chipsWrap" style="display:none" class="row">
+          <label>Days:</label><span class="chips" id="chips"></span></span>
+        <label class="muted"><input type="checkbox" id="ntfA"> notify athlete</label>
+        <button onclick="assign()">Assign</button>
+        <span id="amsg" class="muted"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <h3>Active Plans</h3>
+        <button class="ghost" onclick="loadActivePlans()">Refresh</button>
+      </div>
+      <div id="apBody"></div>
+      <div id="apmsg" class="muted"></div>
+    </div>
+    <div id="calzone">
+      <div id="calcol">
+        <div class="card">
+          <div class="toolbar">
+            <div class="row">
+              <button class="ghost" onclick="nav(-1)">&larr;</button>
+              <h3 id="mtitle"></h3>
+              <button class="ghost" onclick="nav(1)">&rarr;</button>
+              <button class="ghost" onclick="goToday()">Today</button>
+            </div>
+            <div class="muted">drag to move &middot; click a session to edit &middot; click an empty day to add</div>
+          </div>
+          <div id="cal"></div>
+        </div>
+      </div>
+      <div id="panel" class="card"></div>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <h3>🏁 Upcoming Races</h3>
+        <button class="ghost" onclick="loadRaces()">Refresh</button>
+      </div>
+      <div id="raceBody"></div>
+      <div id="racemsg" class="muted"></div>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <h3>PRs &amp; Benchmarks</h3>
+        <button class="ghost" onclick="loadBench()">Refresh</button>
+      </div>
+      <table><thead><tr><th>Movement</th><th>Value</th><th>Kind</th><th>Date</th><th>Source</th></tr></thead>
+      <tbody id="benchBody"></tbody></table>
+      <div id="bmsg" class="muted"></div>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <h3>Recent Activity <span class="muted" style="font-size:13px;font-weight:400">(all athletes · last 14 days)</span></h3>
+        <button class="ghost" onclick="loadFeed()">Refresh</button>
+      </div>
+      <div id="feedBody"></div>
+      <div id="feedmsg" class="muted"></div>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <h3>All Athletes <span class="muted" style="font-size:13px;font-weight:400">(admin — includes solo signups)</span></h3>
+        <button class="ghost" onclick="loadAllAthletes()">Refresh</button>
+      </div>
+      <div style="overflow-x:auto"><table><thead><tr>
+        <th>Name</th><th>Username</th><th>Email</th><th>Signed up</th><th>Type</th>
+        <th>Active plans</th><th>Logged</th><th>Missed</th><th></th>
+      </tr></thead><tbody id="allBody"></tbody></table></div>
+      <div id="allmsg" class="muted"></div>
+    </div>
+    <div class="card">
+      <div class="toolbar">
+        <h3>Results Feed <span class="muted">(last 6 months, newest first)</span></h3>
+        <button class="ghost" onclick="loadResults()">Refresh</button>
+      </div>
+      <div id="resBody"></div>
+      <div id="rmsg" class="muted"></div>
+    </div>
+  </div>
+
+  <div id="view-prog" style="display:none">
+    <div class="card">
+      <h3>Add a Program</h3>
+      <div class="row" style="margin-bottom:10px">
+        <input id="upTitle" placeholder="Program title" style="min-width:240px">
+        <select id="upCat"><option>run</option><option>swim</option><option>strength</option><option>conditioning</option><option>hybrid</option></select>
+        <label class="muted"><input type="checkbox" id="upPub"> publish to marketplace</label>
+      </div>
+      <div id="dropzone" ondragover="event.preventDefault();this.classList.add('hot')"
+           ondragleave="this.classList.remove('hot')" ondrop="dropCSV(event)">
+        Drag a plan CSV here — or <button class="ghost" onclick="csvpick.click()">choose file</button>
+        <input type="file" id="csvpick" accept=".csv,.txt" style="display:none" onchange="pickCSV(event)">
+      </div>
+      <div id="upmsg" class="muted" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h3>Program Library</h3>
+      <table><thead><tr id="libHead">
+        <th onclick="sortLib('title')">Title</th>
+        <th onclick="sortLib('durationWeeks')">Wks</th>
+        <th onclick="sortLib('category')">Category</th>
+        <th onclick="sortLib('sched')">Sched</th>
+        <th onclick="sortLib('assigned')">Assigned</th>
+        <th onclick="sortLib('athlete')">Athlete</th>
+        <th onclick="sortLib('isPublished')">Status</th>
+      </tr></thead>
+      <tbody id="libBody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div id="modal" onclick="if(event.target===this)this.style.display='none'">
+  <div class="card" id="mbody"></div>
+</div>
+
+<script>
+const API="https://tpvbxdx648.execute-api.us-east-1.amazonaws.com";
+const CLIENT_ID="68m4vlm2ru9skh47d2lq3e0v16";
+const COG="https://cognito-idp.us-east-1.amazonaws.com/";
+let TOKEN=null,MYSUB=null,cur=new Date(),plans=[],sessions=[],names={},UNAMES={},PROFS={},INVITES=[],selSK=null,ARCH=new Set();
+const COLORS=["#3E6391","#3E7D5B","#C07840","#7A5480","#3E7D8A","#6B7280"];
+const planColor=t=>{let h=0;for(const c of t)h=(h*31+c.charCodeAt(0))>>>0;return COLORS[h%COLORS.length]};
+const esc=t=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+const api=(p,o={})=>fetch(API+p,{...o,headers:{...(o.headers||{}),
+  "Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"}}).then(r=>r.json());
+
+async function signIn(){
+  const r=await fetch(COG,{method:"POST",headers:{"Content-Type":"application/x-amz-json-1.1",
+    "X-Amz-Target":"AWSCognitoIdentityProviderService.InitiateAuth"},
+    body:JSON.stringify({AuthFlow:"USER_PASSWORD_AUTH",ClientId:CLIENT_ID,
+      AuthParameters:{USERNAME:u.value,PASSWORD:p.value}})});
+  const d=await r.json();
+  if(!d.AuthenticationResult){lerr.textContent=d.message||"Sign-in failed";return}
+  TOKEN=d.AuthenticationResult.IdToken;
+  MYSUB=JSON.parse(atob(TOKEN.split(".")[1])).sub;
+  who.textContent=u.value; login.style.display="none";
+  topnav.style.display="block"; show("cal");
+  await loadPlans(); await loadAthletes(); loadInvites(); await loadAllAthletes(); loadFeed(); athleteChanged(); handleHash();
+}
+function show(v){
+  document.getElementById("view-cal").style.display = v==="cal"?"block":"none";
+  document.getElementById("view-prog").style.display = v==="prog"?"block":"none";
+  navCal.classList.toggle("nav-on",v==="cal");
+  navProg.classList.toggle("nav-on",v==="prog");
+  if(v==="prog")renderLib();
+}
+async function loadPlans(){
+  const d=await api("/coach/plans");
+  plans=d.plans||[];
+  api("/coach/plans/usage").then(u=>{USAGE=u.usage||{};renderLib();});
+  planSel.innerHTML=plans.map(p=>`<option value="${p.planId}">${p.title} (${p.durationWeeks}w)</option>`).join("");
+  startDate.value=new Date(Date.now()+864e5).toISOString().slice(0,10);
+  planChanged();
+}
+
+async function renamePlan(pid,cur){
+  const t=prompt("New plan name (updates the store, the athlete's calendar cards, and all assignments):",cur);
+  if(!t||!t.trim()||t.trim()===cur)return;
+  const d=await api("/coach/plans/rename",{method:"POST",body:JSON.stringify({planId:pid,title:t.trim()})});
+  if(d.ok){await loadPlans();renderLib();alert(`Renamed. ${d.itemsUpdated} calendar/assignment items updated.`)}
+  else alert(d.error||"rename failed");
+}
+async function togglePub(pid,pub){
+  const d=await api("/coach/plans/publish",{method:"POST",body:JSON.stringify({planId:pid,publish:pub==="true"||pub===true})});
+  if(d.ok){await loadPlans();renderLib()}else alert(d.error||"failed");
+}
+let USAGE={},LIBSORT={key:"title",asc:true};
+function libVal(p,k){
+  if(k==="sched")return p.isFloatingSchedule?0:1;
+  if(k==="assigned")return (USAGE[p.planId]||{}).assigned||0;
+  if(k==="athlete")return (USAGE[p.planId]||{}).athlete||0;
+  if(k==="isPublished")return p.isPublished?1:0;
+  const v=p[k];return typeof v==="string"?v.toLowerCase():(v||0);
+}
+function sortLib(k){
+  if(LIBSORT.key===k)LIBSORT.asc=!LIBSORT.asc;else LIBSORT={key:k,asc:true};
+  renderLib();
+}
+function renderLib(){
+  const arrow=k=>LIBSORT.key===k?(LIBSORT.asc?" ▴":" ▾"):"";
+  [...libHead.children].forEach(th=>{th.textContent=th.textContent.replace(/ [▴▾]$/,"")});
+  const map={title:0,durationWeeks:1,category:2,sched:3,assigned:4,athlete:5,isPublished:6};
+  if(map[LIBSORT.key]!==undefined)libHead.children[map[LIBSORT.key]].textContent+=arrow(LIBSORT.key);
+  const sorted=[...plans].sort((a,b)=>{
+    const x=libVal(a,LIBSORT.key),y=libVal(b,LIBSORT.key);
+    return (x<y?-1:x>y?1:0)*(LIBSORT.asc?1:-1);
+  });
+  libBody.innerHTML=sorted.map(p=>{
+    const u=USAGE[p.planId]||{};
+    return `<tr><td>${esc(p.title)} <button class="ghost" style="padding:2px 6px" title="Rename" onclick='renamePlan("${p.planId}","${esc(p.title)}")'>✏️</button></td>
+    <td>${p.durationWeeks}</td>
+    <td>${p.category}</td><td>${p.isFloatingSchedule?"float":"fixed"}</td>
+    <td>${u.assigned?`<b>${u.assigned}</b>`:'<span class="muted">0</span>'}</td>
+    <td>${u.athlete?`<b>${u.athlete}</b>`:'<span class="muted">0</span>'}</td>
+    <td><button class="ghost" style="padding:3px 10px" title="${p.isPublished?"Click to unpublish":"Click to publish to the store"}" onclick='togglePub("${p.planId}",${p.isPublished?"false":"true"})'>${p.isPublished?"Live ✓":"Draft"}</button></td></tr>`;
+  }).join("");
+}
+function planChanged(){
+  const pl=plans.find(x=>x.planId===planSel.value);
+  chipsWrap.style.display=pl&&pl.isFloatingSchedule?"flex":"none";
+  if(pl&&pl.isFloatingSchedule){
+    const n=["S","M","T","W","T","F","S"];
+    chips.innerHTML=n.map((c,i)=>`<button class="chip" data-wd="${i+1}" onclick="this.classList.toggle('on')">${c}</button>`).join("");
+    chips.children[2].classList.add("on"); chips.children[5].classList.add("on");
+  }
+  const raceOpt=assignMode.querySelector('option[value="race"]');
+  raceOpt.disabled=!!(pl&&pl.isFloatingSchedule);
+  if(raceOpt.disabled&&assignMode.value==="race")assignMode.value="start";
+  assignModeChanged();
+}
+function assignModeChanged(){
+  dateLbl.textContent=assignMode.value==="race"?"Race day:":"Start:";
+  raceNameIn.style.display=assignMode.value==="race"?"inline-block":"none";
+  raceEst();
+}
+function raceEst(){
+  raceHint.textContent="";
+  if(assignMode.value!=="race"||!startDate.value)return;
+  const pl=plans.find(x=>x.planId===planSel.value);
+  if(!pl||pl.isFloatingSchedule)return;
+  const est=new Date(startDate.value+"T00:00:00Z");
+  est.setUTCDate(est.getUTCDate()-(pl.durationWeeks*7-1));
+  raceHint.textContent="≈ starts "+est.toISOString().slice(0,10)+" (exact date confirmed on assign)";
+}
+async function loadAthletes(){
+  aerr.textContent="";
+  let d;
+  try{ d=await api("/coach/athletes"); }
+  catch(e){ aerr.textContent="roster fetch failed: "+e; return; }
+  if(d.error){ aerr.textContent="roster: "+d.error; return; }
+  names={}; const plansBy={}; ARCH=new Set();
+  (d.assignments||[]).forEach(a=>{
+    const s=((a.GSI1SK||"").split("#")[1])||"";
+    if(!s)return;
+    if(a.itemType==="PROFILE"){
+      names[s]=a.name||a.username||s.slice(0,8);
+      UNAMES[s]=a.username||"";
+      PROFS[s]=a;
+      if(a.archived)ARCH.add(s);
+    }
+    else if(a.planTitle){plansBy[s]=plansBy[s]||[];plansBy[s].push(a.planTitle)}
+  });
+  let opts=`<option value="${MYSUB}">Me (coach)</option>`;
+  const subs=new Set([...Object.keys(names),...Object.keys(plansBy)]);
+  subs.forEach(s=>{ if(s!==MYSUB&&!ARCH.has(s))
+    opts+=`<option value="${s}">${names[s]||s.slice(0,8)+"…"}${plansBy[s]?" — "+plansBy[s].join(", "):""}</option>`;});
+  archRow.innerHTML=ARCH.size?"Archived: "+[...ARCH].map(s=>
+    `${esc(names[s]||s.slice(0,8))} <button class="ghost" onclick='setArchive("${s}",false)'>Restore</button> <button class="danger" style="padding:2px 8px" onclick='openDeleteAthlete("${s}")'>Delete</button>`).join(" · "):"";
+  athlete.innerHTML=opts;
+  acount.textContent=(subs.has(MYSUB)?subs.size-1:subs.size)+" athlete(s)";
+  renderChips();
+}
+function renderChips(){
+  athleteChips.innerHTML=[...athlete.options].map(o=>{
+    const label=o.value===MYSUB?"Me (coach)":esc(o.text.split(" — ")[0]);
+    return `<button class="achip${o.value===athlete.value?" on":""}" onclick='selectAthlete("${o.value}")'>${label}</button>`;
+  }).join("");
+}
+function selectAthlete(v){
+  if(athlete.value===v)return;
+  athlete.value=v; renderChips(); athleteChanged();
+}
+function openDeleteAthlete(dsub){
+  const nm=names[dsub]||(PROFS[dsub]||{}).name||dsub.slice(0,8);
+  mbody.innerHTML=`<h3 style="color:#8B2E2E">Delete ${esc(nm)} — permanently</h3>
+    <p style="margin:10px 0">This erases their account, sign-in, all training data, logged history, and any invite codes. <b>There is no undo.</b> (Archive is the reversible option.)</p>
+    <p class="muted" style="margin-bottom:6px">Type <b>DELETE</b> and enter YOUR coach password to confirm:</p>
+    <div class="row" style="margin-bottom:8px">
+      <input id="dconfirm" placeholder="Type DELETE" style="min-width:140px">
+      <input id="dpass" type="password" placeholder="Coach password" style="min-width:180px">
+    </div>
+    <div class="row">
+      <button class="danger" onclick='doDeleteAthlete("${dsub}","${esc(nm)}")'>Delete permanently</button>
+      <button class="ghost" onclick='modal.style.display="none"'>Cancel</button>
+    </div>
+    <div id="dmsg" class="err" style="margin-top:10px"></div>`;
+  modal.style.display="flex";
+}
+async function doDeleteAthlete(dsub,nm){
+  if(dconfirm.value.trim()!=="DELETE"){dmsg.textContent='Type DELETE exactly to confirm.';return}
+  if(!dpass.value){dmsg.textContent="Coach password required.";return}
+  dmsg.textContent="Verifying password…";
+  const vr=await fetch(COG,{method:"POST",headers:{"Content-Type":"application/x-amz-json-1.1",
+    "X-Amz-Target":"AWSCognitoIdentityProviderService.InitiateAuth"},
+    body:JSON.stringify({AuthFlow:"USER_PASSWORD_AUTH",ClientId:CLIENT_ID,
+      AuthParameters:{USERNAME:"coachgreg",PASSWORD:dpass.value}})});
+  const vd=await vr.json();
+  if(!vd.AuthenticationResult){dmsg.textContent="Password incorrect — nothing deleted.";return}
+  dmsg.textContent="Deleting…";
+  const d=await api("/coach/athletes/delete",{method:"POST",body:JSON.stringify({athleteSub:dsub})});
+  if(d.ok){
+    modal.style.display="none";
+    alert(`${nm} deleted permanently (${d.itemsDeleted} data items, ${d.invitesDeleted} invite(s)).`);
+    if(athlete.value===dsub){athlete.value=MYSUB;}
+    await loadAthletes(); loadAllAthletes(); renderChips(); athleteChanged();
+  } else dmsg.textContent=d.error||"delete failed";
+}
+async function loadFeed(){
+  feedmsg.textContent="Loading…"; feedBody.innerHTML="";
+  const d=await api("/coach/feed");
+  if(d.error){feedmsg.textContent=d.error;return}
+  const rs=d.results||[];
+  feedmsg.textContent=rs.length?"":"No logged sessions in the last 14 days — this fills up as athletes train.";
+  feedBody.innerHTML=rs.map(s=>{
+    const nm=names[s.sub]||(PROFS[s.sub]||{}).name||s.sub.slice(0,8);
+    const st=s.logStatus==="complete"?'<b style="color:#16A34A">✓</b>':'<b style="color:#DC2626">✗</b>';
+    const tm=s.logTimeSeconds?` · ${Math.floor(s.logTimeSeconds/60)}:${String(s.logTimeSeconds%60).padStart(2,"0")}`:"";
+    return `<div class="res">
+      <div>${st} <a href="#" onclick='adminView("${s.sub}","${esc(nm)}");return false'><b>${esc(nm)}</b></a> — ${esc(s.title)}
+        <span class="badge" style="background:${planColor(s.planTitle||"")}">${esc(s.planTitle||"")}</span>
+        <span class="muted">${esc(s.scheduledDate)}${tm}</span></div>
+      ${s.logResultText?`<pre style="margin-top:6px">${esc(s.logResultText)}</pre>`:""}
+      ${s.logComment?`<p class="muted" style="margin-top:4px">"${esc(s.logComment)}"</p>`:""}
+      ${thumbs(s)}
+    </div>`;
+  }).join("");
+}
+async function loadAllAthletes(){
+  allmsg.textContent="Loading…"; allBody.innerHTML="";
+  const d=await api("/coach/athletes/all");
+  if(d.error){allmsg.textContent=d.error;return}
+  const a=d.athletes||[];
+  allmsg.textContent=a.length?"":"No athletes yet.";
+  allBody.innerHTML=a.map(x=>{
+    PROFS[x.sub]=PROFS[x.sub]||{name:x.name,username:x.username,email:x.email};
+    return `<tr>
+    <td>${esc(x.name)}${x.sub===MYSUB?' <span class="muted">(you)</span>':''}</td>
+    <td title="${esc(x.username)}">${x.username&&x.username.startsWith("apple_")?'<span class="muted"> Apple ID</span>':esc(x.username)}</td>
+    <td>${x.email?`<a href="mailto:${esc(x.email)}">${esc(x.email)}</a>`:"—"}</td>
+    <td>${esc((x.createdAt||"").slice(0,10))}</td>
+    <td>${x.coached?"Coached":"<b>Solo</b>"}${x.provider==="apple"?" ·  Apple":""}${x.enabled?"":" · disabled"}</td>
+    <td>${(x.activePlans||[]).map(esc).join(", ")||"—"}</td>
+    <td>${x.logged}</td><td>${x.missed?`<b style="color:#B3261E">${x.missed}</b>`:0}</td>
+    <td>${x.sub===MYSUB?"":`<button class="ghost" onclick='adminView("${x.sub}","${esc(x.name)}")'>View</button>`}</td>
+  </tr>`}).join("");
+}
+function adminView(sub,name){
+  if(![...athlete.options].some(o=>o.value===sub)){
+    const o=document.createElement("option");o.value=sub;o.text=name;athlete.appendChild(o);
+    names[sub]=name;
+  }
+  selectAthlete(sub);
+  enterAthleteMode(sub);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+async function loadInvites(){
+  const d=await api("/coach/invites");
+  INVITES=d.invites||[];
+  renderMiniProfile();
+}
+function renderMiniProfile(){
+  const v=athlete.value;
+  if(!v||v===MYSUB){profCard.style.display="none";return}
+  const p=PROFS[v]||{};
+  const inv=INVITES.find(i=>i.username&&i.username===p.username);
+  const invHtml=inv
+    ?`<span class="code" style="font-size:13px;padding:2px 8px;letter-spacing:2px">${esc(inv.code)}</span> <button class="ghost" style="padding:2px 8px" onclick='navigator.clipboard.writeText("${esc(inv.code)}");this.textContent="Copied ✓"'>Copy</button> <span class="muted">unredeemed — text them this</span>`
+    :'<span class="muted">account claimed ✓</span>';
+  const rows=[
+    ["Name",esc(p.name||"—")],
+    ["Username",(p.username||"").startsWith("apple_")?'<span class="muted"> Apple ID</span>':esc(p.username||"—")],
+    ["Email",p.email?`<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`:"—"],
+    ["Nickname",esc(p.nickname||"—")],
+    ["Push device",p.endpointArn?"✓ registered":"— none yet"],
+    ["Status",ARCH.has(v)?"Archived":"Active"],
+    ["Invite code",invHtml]];
+  profCard.innerHTML=rows.map(r=>`<b>${r[0]}</b><span>${r[1]}</span>`).join("");
+  profCard.className="prof";
+  profCard.style.display="grid";
+}
+function athleteChanged(){
+  closePanel();
+  const mine=athlete.value===MYSUB;
+  archBtn.style.display=mine?"none":"inline-block";
+  delBtn.style.display=mine?"none":"inline-block";
+  reinvBtn.style.display=mine?"none":"inline-block";
+  renderMiniProfile();
+  loadCal(); loadActivePlans(); loadRaces(); loadBench(); loadResults();
+}
+async function loadActivePlans(){
+  apmsg.textContent="Loading…"; apBody.innerHTML="";
+  const d=await api(`/coach/enrollments?athleteSub=${athlete.value}`);
+  if(d.error){apmsg.textContent=d.error;return}
+  const act=(d.enrollments||[]).filter(e=>e.status==="active")
+    .sort((a,b)=>String(a.createdAt||"")<String(b.createdAt||"")?-1:1);
+  apmsg.textContent=act.length?"":"No active plans.";
+  apBody.innerHTML=act.map(e=>`<div class="res">
+    <span class="badge" style="background:${planColor(e.planTitle||"")}">${esc(e.planTitle||"?")}</span>
+    <span class="muted">started ${esc((e.startDate||"").slice(0,10))}${e.raceName?` · 🏁 ${esc(e.raceName)} ${esc(e.raceDate||"")}`:""}${e.isSubscription?" · subscription":""}</span>
+    <button class="danger" style="float:right" onclick='endEnr("${e.enrollmentId}","${esc(e.planTitle||"this plan")}")'>End plan</button>
+  </div>`).join("");
+}
+async function endEnr(eid,title){
+  if(!confirm(`End "${title}" for this athlete?\n\nFuture unlogged sessions are removed from their calendar. Logged history is kept.`))return;
+  const d=await api("/coach/enrollments/end",{method:"POST",body:JSON.stringify({
+    athleteSub:athlete.value,enrollmentId:eid})});
+  if(d.ok){loadActivePlans();loadCal();loadRaces()}
+  else alert(d.error||"failed");
+}
+async function setArchive(sub,arch){
+  const nm=names[sub]||"this athlete";
+  const msg=arch?`Archive ${nm}?\n\nTheir sign-in is disabled and they disappear from the roster. All data is kept. You can restore them anytime.`
+               :`Restore ${nm}? They can sign in again.`;
+  if(!confirm(msg))return;
+  const d=await api("/coach/athletes/archive",{method:"POST",body:JSON.stringify({athleteSub:sub,archive:arch})});
+  if(!d.ok){alert(d.error||"failed");return}
+  await loadAthletes();
+  if(arch&&athlete.value===sub){athlete.value=MYSUB;renderChips();athleteChanged();}
+}
+function archiveCurrent(){setArchive(athlete.value,true)}
+async function newInvite(){
+  const u=UNAMES[athlete.value];
+  if(!u){alert("no username on file for this athlete");return}
+  const nm=names[athlete.value]||u;
+  if(!confirm(`Generate a NEW invite code for ${nm}?\n\nAny older unused codes are voided. When they redeem it, they pick a fresh password - use this for lost codes or forgotten passwords.`))return;
+  const d=await api("/coach/athletes/create",{method:"POST",body:JSON.stringify({username:u,name:nm})});
+  if(d.inviteCode){await loadInvites();
+    alert(`New code for ${nm}: ${d.inviteCode}\n\nIt is also in the Pending invites row with a Copy button.`);}
+  else alert(d.error||"failed");
+}
+function openAddAthlete(){
+  mbody.innerHTML=`<h3>Add Athlete</h3>
+    <div class="row" style="margin-bottom:8px">
+      <input id="aname" placeholder="Full name" style="min-width:200px">
+      <input id="auser" placeholder="username (e.g. jane.doe)" style="min-width:200px">
+    </div>
+    <button onclick="createAthlete()">Create & Generate Invite</button>
+    <div id="cres" style="margin-top:12px"></div>`;
+  modal.style.display="flex";
+}
+async function createAthlete(){
+  const d=await api("/coach/athletes/create",{method:"POST",
+    body:JSON.stringify({name:aname.value,username:auser.value})});
+  if(d.inviteCode){
+    cres.innerHTML=`<p>✓ Account created for <b>${d.username}</b></p>
+      <p style="margin:10px 0">Invite code: <span class="code">${d.inviteCode}</span></p>
+      <p class="muted">Send them this code. In the GET FIT iOS app: Profile → "Have an invite code?" → they enter it and pick their own password.</p>`;
+    loadAthletes(); loadInvites();
+  } else cres.textContent=d.error||"failed";
+}
+async function assign(){
+  const pl=plans.find(x=>x.planId===planSel.value);
+  const body={athleteSub:athlete.value,planId:planSel.value,notify:ntfA.checked};
+  if(assignMode.value==="race"){
+    body.raceDate=startDate.value;
+    const rn=raceNameIn.value.trim();
+    if(rn)body.raceName=rn;
+  } else body.startDate=startDate.value;
+  if(pl.isFloatingSchedule)
+    body.chosenWeekdays=[...chips.querySelectorAll(".on")].map(c=>+c.dataset.wd);
+  amsg.textContent="Assigning…";
+  const d=await api("/coach/assign",{method:"POST",body:JSON.stringify(body)});
+  amsg.textContent=d.sessionsCreated
+    ?`✓ ${d.sessionsCreated} sessions from ${d.firstSession}`+(d.computedStart?" (start computed from race day)":"")
+    :(d.error||"failed");
+  loadAthletes(); loadCal();
+}
+async function loadCal(){
+  const f=new Date(cur.getFullYear(),cur.getMonth(),1),l=new Date(cur.getFullYear(),cur.getMonth()+1,0);
+  const frm=f.toISOString().slice(0,10),to=l.toISOString().slice(0,10),w=athlete.value;
+  const d= w===MYSUB ? await api(`/me/schedule?from=${frm}&to=${to}`)
+                     : await api(`/coach/schedule?athleteSub=${w}&from=${frm}&to=${to}`);
+  sessions=d.sessions||[]; render(f,l);
+}
+function render(first,last){
+  const _t=new Date();
+  const TODAYISO=`${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,"0")}-${String(_t.getDate()).padStart(2,"0")}`;
+  mtitle.textContent=first.toLocaleDateString("en-US",{month:"long",year:"numeric"});
+  let html=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(n=>`<div class="dhead">${n}</div>`).join("");
+  for(let i=0;i<first.getDay();i++)html+=`<div class="day other"></div>`;
+  for(let day=1;day<=last.getDate();day++){
+    const iso=new Date(Date.UTC(first.getFullYear(),first.getMonth(),day)).toISOString().slice(0,10);
+    const t=sessions.filter(s=>s.scheduledDate===iso);
+    html+=`<div class="day${iso===TODAYISO?" today":""}" data-date="${iso}"
+      onclick="dayClick(event,'${iso}')"
+      ondragover="event.preventDefault();this.classList.add('dragover')"
+      ondragleave="this.classList.remove('dragover')"
+      ondrop="dropSess(event,'${iso}')"><div class="dnum">${day}<button class="dayadd" title="Add a workout" onclick='event.stopPropagation();openAdd("${iso}")'>+</button></div>`+
+      t.map(s=>{
+        const st=s.logStatus==="complete"?'<span class="st done">✓</span>'
+               :s.logStatus==="missed"?'<span class="st miss">✗</span>':"";
+        return `<div class="sess${s.SK===selSK?" sel":""}" draggable="true"
+          ondragstart='event.dataTransfer.setData("text/plain","${s.SK}")'
+          style="background:${planColor(s.planTitle||"")}"
+          onclick='event.stopPropagation();openSess("${s.SK}")'>${s.coachTitle||s.title}${st}</div>`;
+      }).join("")+`</div>`;
+  }
+  cal.innerHTML=html;
+}
+function nav(n){closePanel();cur=new Date(cur.getFullYear(),cur.getMonth()+n,1);loadCal()}
+function dayClick(ev,iso){
+  if(ev.target.closest(".sess"))return;
+  openAdd(iso);
+}
+async function dropSess(ev,newDate){
+  ev.preventDefault();
+  ev.currentTarget.classList.remove("dragover");
+  const sk=ev.dataTransfer.getData("text/plain");
+  const s=sessions.find(x=>x.SK===sk);
+  if(!s||s.scheduledDate===newDate)return;
+  const w=athlete.value;
+  const d= w===MYSUB
+    ? await api("/sessions/move",{method:"POST",body:JSON.stringify({sessionSK:sk,newDate})})
+    : await api("/coach/move",{method:"POST",body:JSON.stringify({athleteSub:w,sessionSK:sk,newDate})});
+  if(d.ok)loadCal(); else alert(d.error||"move failed");
+}
+function closePanel(){
+  panel.style.display="none"; selSK=null;
+  document.querySelectorAll(".sess.sel").forEach(e=>e.classList.remove("sel"));
+}
+function openSess(sk){
+  const s=sessions.find(x=>x.SK===sk); if(!s)return;
+  selSK=sk;
+  document.querySelectorAll(".sess.sel").forEach(e=>e.classList.remove("sel"));
+  let photos="";
+  if(s.logPhotoKeys&&s.logPhotoKeys.length)
+    photos=`<p class="muted" style="margin-top:6px">${s.logPhotoKeys.length} photo(s): `+
+      s.logPhotoKeys.map((k,i)=>`<button class="ghost" onclick='viewPhoto("${k}")'>View ${i+1}</button>`).join(" ")+`</p>`;
+  const stTxt=s.logStatus==="complete"?'<b style="color:#16A34A">complete ✓</b>'
+            :s.logStatus==="missed"?'<b style="color:#DC2626">missed ✗</b>':"<b>pending</b>";
+  panel.innerHTML=`
+    <button class="panelx" onclick="closePanel()" title="Close">&times;</button>
+    <h3>Edit workout</h3>
+    <p style="margin-bottom:6px"><span class="badge" style="background:${planColor(s.planTitle||"")}">${esc(s.planTitle||"")}</span></p>
+    <div class="row" style="margin-bottom:6px">
+      <label>Title:</label><input id="etitle" value="${esc(s.coachTitle||s.title||"")}" style="flex:1;min-width:160px">
+    </div>
+    <p class="muted">${s.scheduledDate}${s.weekNumber?" · week "+s.weekNumber:""} · ${stTxt}
+      ${s.logTimeSeconds?(" · time "+Math.floor(s.logTimeSeconds/60)+":"+String(s.logTimeSeconds%60).padStart(2,"0")):""}</p>
+    ${s.logResultText?`<p style="margin-top:8px"><b>Results:</b></p><pre>${esc(s.logResultText)}</pre>`:""}
+    ${s.logComment?`<p class="muted" style="margin-top:6px"><b>Athlete:</b> "${esc(s.logComment)}"</p>`:""}
+    ${photos}
+    <p style="margin:10px 0 4px"><b>Workout text</b> <span class="muted">(re-parsed on save — benchmark targets stay live)</span></p>
+    <textarea id="edraw">${esc(s.rawText||"")}</textarea>
+    <div class="row" style="margin-top:10px">
+      <label>Date:</label><input type="date" id="mvdate" value="${s.scheduledDate}">
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button onclick='saveSess("${s.SK}")'>Save</button>
+      <button class="danger" onclick='delSess("${s.SK}")'>Delete</button>
+      <label class="muted"><input type="checkbox" id="ntf"> notify athlete</label>
+    </div>
+    <div id="emsg" class="muted" style="margin-top:8px"></div>`;
+  panel.style.display="block";
+  render(new Date(cur.getFullYear(),cur.getMonth(),1),new Date(cur.getFullYear(),cur.getMonth()+1,0));
+}
+async function saveSess(sk){
+  const s=sessions.find(x=>x.SK===sk); if(!s)return;
+  emsg.textContent="Saving…";
+  const body={athleteSub:athlete.value,sessionSK:sk,
+    rawText:document.getElementById("edraw").value,
+    notify:document.getElementById("ntf").checked};
+  const nt=document.getElementById("etitle").value.trim();
+  if(nt&&nt!==(s.coachTitle||s.title||""))body.title=nt;
+  const nd=document.getElementById("mvdate").value;
+  if(nd&&nd!==s.scheduledDate)body.newDate=nd;
+  const d=await api("/coach/sessions/update",{method:"POST",body:JSON.stringify(body)});
+  if(d.ok){
+    const keep=d.newSessionSK||sk;
+    await loadCal();
+    if(sessions.find(x=>x.SK===keep))openSess(keep);
+    else closePanel();
+    const em=document.getElementById("emsg"); if(em)em.textContent="✓ saved";
+  } else emsg.textContent=d.error||"save failed";
+}
+async function delSess(sk){
+  if(!confirm("Delete this session from the calendar? This can't be undone."))return;
+  emsg.textContent="Deleting…";
+  const d=await api("/coach/sessions/update",{method:"POST",body:JSON.stringify({
+    athleteSub:athlete.value,sessionSK:sk,delete:true,
+    notify:document.getElementById("ntf").checked})});
+  if(d.ok){closePanel();loadCal()}
+  else emsg.textContent=d.error||"delete failed";
+}
+function openAdd(iso){
+  selSK=null;
+  document.querySelectorAll(".sess.sel").forEach(e=>e.classList.remove("sel"));
+  panel.innerHTML=`
+    <button class="panelx" onclick="closePanel()" title="Close">&times;</button>
+    <h3>Add a workout</h3>
+    <div class="row" style="margin:8px 0">
+      <label>Date:</label><input type="date" id="adate" value="${iso}">
+      <label>Type:</label><select id="atype">
+        <option value="">Auto-detect</option>
+        <option value="run">Run</option>
+        <option value="swim">Swim</option>
+        <option value="bike">Bike</option>
+        <option value="strength">Strength</option>
+        <option value="rest">Rest</option>
+      </select>
+    </div>
+    <input id="atitle" placeholder="Title (optional)" style="width:100%;margin-bottom:8px">
+    <textarea id="araw" placeholder="Write the workout — benchmark syntax works here (e.g. 4 x 800m @ 5k TT pace)"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button onclick="createSess()">Add to calendar</button>
+      <label class="muted"><input type="checkbox" id="antf"> notify athlete</label>
+    </div>
+    <div id="admsg" class="muted" style="margin-top:8px"></div>
+    <p class="muted" style="margin-top:8px">Files under "Coach Extras" on the athlete's calendar — syncs to their app like any other session.</p>`;
+  panel.style.display="block";
+}
+async function createSess(){
+  const raw=document.getElementById("araw").value.trim();
+  if(!raw){admsg.textContent="write the workout first";return}
+  admsg.textContent="Adding…";
+  const body={athleteSub:athlete.value,
+    date:document.getElementById("adate").value,rawText:raw,
+    notify:document.getElementById("antf").checked};
+  const t=document.getElementById("atitle").value.trim();
+  if(t)body.title=t;
+  const ty=document.getElementById("atype").value;
+  if(ty)body.sessionType=ty;
+  const d=await api("/coach/sessions/create",{method:"POST",body:JSON.stringify(body)});
+  if(d.ok){closePanel();loadCal()}
+  else admsg.textContent=d.error||"add failed";
+}
+function goToday(){closePanel();cur=new Date();loadCal()}
+async function loadRaces(){
+  racemsg.textContent="Loading…"; raceBody.innerHTML="";
+  const d=await api(`/coach/enrollments?athleteSub=${athlete.value}`);
+  if(d.error){racemsg.textContent=d.error;return}
+  const today=new Date().toISOString().slice(0,10);
+  const races=(d.enrollments||[]).filter(e=>e.status==="active"&&e.raceDate&&e.raceDate>=today)
+    .sort((a,b)=>a.raceDate<b.raceDate?-1:1);
+  racemsg.textContent=races.length?"":"No upcoming races on file — races appear when assigned with a race day or when the athlete enters one at signup.";
+  raceBody.innerHTML=races.map(e=>{
+    const days=Math.round((new Date(e.raceDate+"T00:00:00Z")-new Date(today+"T00:00:00Z"))/864e5);
+    return `<div class="res"><b>🏁 ${esc(e.raceName||"Race")}</b> · ${e.raceDate} <b>(${days} days out)</b>
+      <span class="badge" style="background:${planColor(e.planTitle||"")}">${esc(e.planTitle||"")}</span>
+      <span class="muted">plan started ${esc((e.startDate||"").slice(0,10))}</span></div>`;
+  }).join("");
+}
+async function loadBench(){
+  bmsg.textContent="Loading…"; benchBody.innerHTML="";
+  const d=await api(`/coach/benchmarks?athleteSub=${athlete.value}`);
+  if(d.error){bmsg.textContent=d.error;return}
+  const b=d.benchmarks||[];
+  bmsg.textContent=b.length?"":"No benchmarks yet — they appear here when the athlete logs a PR or earns one from an AMRAP/TT.";
+  benchBody.innerHTML=b.map(x=>{
+    const entered=(x.enteredReps&&+x.enteredReps>1)?` <span class="muted">(from ${x.enteredValue}×${x.enteredReps})</span>`:"";
+    return `<tr><td>${esc(x.movement)}</td><td>${esc(x.value)} ${esc(x.unit||"")}${entered}</td>
+      <td>${esc(x.kind||"")}</td><td>${esc(x.dateISO||"")}</td><td>${esc(x.source||"")}</td></tr>`;
+  }).join("");
+}
+async function loadResults(){
+  rmsg.textContent="Loading…"; resBody.innerHTML="";
+  const to=new Date(Date.now()+864e5*400).toISOString().slice(0,10);
+  const from=new Date(Date.now()-180*864e5).toISOString().slice(0,10);
+  const d=await api(`/coach/results?athleteSub=${athlete.value}&from=${from}&to=${to}`);
+  if(d.error){rmsg.textContent=d.error;return}
+  const rs=d.results||[];
+  rmsg.textContent=rs.length?"":"No completed sessions in the last 6 months.";
+  resBody.innerHTML=rs.map(s=>{
+    const st=s.logStatus==="complete"?'<b style="color:#16A34A">✓</b>':'<b style="color:#DC2626">✗</b>';
+    const tm=s.logTimeSeconds?` · ${Math.floor(s.logTimeSeconds/60)}:${String(s.logTimeSeconds%60).padStart(2,"0")}`:"";
+    const ph=thumbs(s);
+    return `<div class="res">
+      <div>${st} <b>${esc(s.title||"")}</b>
+        <span class="badge" style="background:${planColor(s.planTitle||"")}">${esc(s.planTitle||"")}</span>
+        <span class="muted">${esc(s.scheduledDate||"")}${tm}</span></div>
+      ${s.logResultText?`<pre style="margin-top:6px">${esc(s.logResultText)}</pre>`:""}
+      ${s.logComment?`<p class="muted" style="margin-top:4px">"${esc(s.logComment)}"</p>`:""}
+      ${ph?`<div class="row" style="margin-top:6px">${ph}</div>`:""}
+    </div>`;
+  }).join("");
+}
+async function viewPhoto(key){
+  const d=await api("/photos/view",{method:"POST",body:JSON.stringify({key})});
+  if(d.viewUrl)window.open(d.viewUrl,"_blank");
+}
+/* ---- v3.18: photo thumbnails (feed + results) ---- */
+const PHOTOURL={};          /* key -> presigned url, cached so 60s feed polls
+                               do not re-download every image */
+let THSEQ=0;
+function thumbs(s){
+  const keys=(s.logPhotoKeys||[]).slice(0,4);
+  if(!keys.length)return"";
+  const urls=s.photoUrls||[];
+  const cells=keys.map((k,i)=>{
+    if(urls[i]&&!PHOTOURL[k])PHOTOURL[k]=urls[i];
+    const u=PHOTOURL[k]||"";
+    const id="th"+(++THSEQ);
+    if(!u)setTimeout(()=>fillThumb(id,k),0);
+    return `<img class="thumb${u?"":" pending"}" id="${id}"${u?` src="${esc(u)}"`:""}`
+      +` alt="workout photo" title="Open full size" onclick='openPhoto("${k}")'>`;
+  }).join("");
+  return `<div class="thumbs">${cells}</div>`;
+}
+async function photoUrl(key){
+  if(PHOTOURL[key])return PHOTOURL[key];
+  const d=await api("/photos/view",{method:"POST",body:JSON.stringify({key})});
+  if(d&&d.viewUrl){PHOTOURL[key]=d.viewUrl;return d.viewUrl}
+  return"";
+}
+async function fillThumb(id,key){
+  const u=await photoUrl(key); const el=document.getElementById(id);
+  if(el&&u){el.src=u;el.classList.remove("pending")}
+}
+async function openPhoto(key){
+  const u=await photoUrl(key); if(u)window.open(u,"_blank");
+}
+function dropCSV(ev){
+  ev.preventDefault(); dropzone.classList.remove("hot");
+  const f=ev.dataTransfer.files[0]; if(f)readCSV(f);
+}
+function pickCSV(ev){const f=ev.target.files[0]; if(f)readCSV(f)}
+function readCSV(f){
+  if(!upTitle.value)upTitle.value=f.name.replace(/\.[^.]+$/,"").replace(/_/g," ");
+  const r=new FileReader();
+  r.onload=async()=>{
+    upmsg.textContent="Uploading & parsing…";
+    const d=await api("/coach/plans/upload",{method:"POST",body:JSON.stringify({
+      title:upTitle.value,category:upCat.value,publish:upPub.checked,csvText:r.result})});
+    if(d.planId){
+      upmsg.textContent=`✓ "${upTitle.value}" — ${d.weeks} weeks, ${d.sessions} sessions, ${d.floating?"floating":"fixed"} schedule`;
+      await loadPlans(); renderLib();
+    } else upmsg.textContent=d.error||"upload failed";
+  };
+  r.readAsText(f);
+}
+
+/* ---- v3.14 Athlete Pages (hash-routed focus mode) ---- */
+let AMODE=null;
+function _cardByHeader(txt){
+  for(const h of document.querySelectorAll(".card h3"))
+    if(h.textContent.trim().toLowerCase().startsWith(txt)) return h.closest(".card");
+  return null;
+}
+function _focusCards(hide){
+  ["all athletes","recent activity","program library","add a program"].forEach(t=>{
+    const c=_cardByHeader(t); if(c) c.style.display=hide?"none":"";
+  });
+}
+function _abar(){
+  let b=document.querySelector(".abar");
+  if(!b){
+    b=document.createElement("div"); b.className="abar";
+    b.innerHTML=`<button onclick="exitAthleteMode()">← All Athletes</button>
+      <span class="aname" id="abarName"></span><span class="asub" id="abarSub"></span>`;
+    document.body.insertBefore(b, document.body.firstChild);
+  }
+  return b;
+}
+function enterAthleteMode(sub){
+  if(!sub||sub===MYSUB) return;
+  AMODE=sub; _abar();
+  const nm=names[sub]||(PROFS[sub]||{}).name||"Athlete";
+  const p=PROFS[sub]||{};
+  abarName.textContent=nm;
+  abarSub.textContent=(p.username&&!p.username.startsWith("apple_")?"@"+p.username+" · ":"")+
+    (p.endpointArn?"Push ✓":"no push device");
+  document.body.classList.add("athlete-mode");
+  _focusCards(true);
+  if(location.hash!=="#/athlete/"+sub) history.pushState(null,"","#/athlete/"+sub);
+}
+function exitAthleteMode(){
+  AMODE=null;
+  document.body.classList.remove("athlete-mode");
+  _focusCards(false);
+  history.pushState(null,"","#");
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function handleHash(){
+  const m=location.hash.match(/^#\/athlete\/(.+)$/);
+  if(m){
+    const sub=decodeURIComponent(m[1]);
+    const nm=names[sub]||(PROFS[sub]||{}).name;
+    if(nm){ if(![...athlete.options].some(o=>o.value===sub)){const o=document.createElement("option");o.value=sub;o.text=nm;athlete.appendChild(o);} selectAthlete(sub); enterAthleteMode(sub); }
+  }
+}
+window.addEventListener("popstate",()=>{
+  if(location.hash.startsWith("#/athlete/")) handleHash();
+  else if(AMODE) exitAthleteMode();
+});
+
+/* ---- v3.15: mm:ss benchmarks + coach-added races ---- */
+function fmtBenchTimes(){
+  const tb=document.getElementById("benchBody"); if(!tb)return;
+  for(const tr of tb.querySelectorAll("tr")){
+    const tds=tr.querySelectorAll("td"); if(tds.length<3)continue;
+    const kind=(tds[2].textContent||"").trim().toLowerCase();
+    const mv=(tds[0].textContent||"").toLowerCase();
+    const m=(tds[1].textContent||"").trim().match(/^(\d+)\s*sec$/);
+    if(m&&(kind==="timetrial"||mv.includes("tt")||mv.includes("time trial"))){
+      const n=parseInt(m[1],10);
+      tds[1].textContent=Math.floor(n/60)+":"+String(n%60).padStart(2,"0")+" ("+n+" sec)";
+    }
+  }
+}
+const _origLoadBench=loadBench;
+loadBench=async function(){await _origLoadBench.apply(this,arguments);fmtBenchTimes();};
+
+async function addRace(){
+  const n=document.getElementById("nrName").value.trim();
+  const d=document.getElementById("nrDate").value;
+  if(!d){alert("Pick a date");return}
+  await api("/coach/races/add",{method:"POST",body:JSON.stringify(
+    {athleteSub:athlete.value,date:d,name:n||"Race"})});
+  document.getElementById("nrName").value="";
+  loadRaces();
+}
+async function removeRace(d){
+  if(!confirm("Remove this race?"))return;
+  await api("/coach/races/remove",{method:"POST",body:JSON.stringify(
+    {athleteSub:athlete.value,date:d})});
+  loadRaces();
+}
+const _origLoadRaces=loadRaces;
+loadRaces=async function(){
+  await _origLoadRaces.apply(this,arguments);
+  const card=document.getElementById("raceBody"); if(!card)return;
+  // add-race form (once, appended after raceBody inside the card)
+  if(!document.getElementById("nrDate")){
+    const div=document.createElement("div");
+    div.className="row"; div.style.marginTop="10px";
+    div.innerHTML=`<input id="nrName" placeholder="Race name (e.g. Greenwich Half)" style="min-width:220px">
+      <input id="nrDate" type="date">
+      <button class="ghost" onclick="addRace()">+ Add race</button>`;
+    card.parentNode.insertBefore(div, document.getElementById("racemsg"));
+  }
+  if(!athlete.value||athlete.value===MYSUB)return;
+  try{
+    const d=await api("/coach/races?athleteSub="+athlete.value);
+    const today=new Date().toISOString().slice(0,10);
+    const mine=(d.races||[]).filter(r=>r.raceDate>=today);
+    if(mine.length){
+      racemsg.textContent="";
+      card.innerHTML+=mine.map(r=>{
+        const days=Math.round((new Date(r.raceDate+"T00:00:00Z")-new Date(today+"T00:00:00Z"))/864e5);
+        return `<div class="res"><b>🏁 ${esc(r.raceName||"Race")}</b> · ${r.raceDate} <b>(${days} days out)</b>
+          <span class="badge" style="background:#6B4E8E">added by coach</span>
+          <a href="#" onclick='removeRace("${r.raceDate}");return false' class="muted" style="text-decoration:none">✕ remove</a></div>`;
+      }).join("");
+    }
+  }catch(e){}
+};
+
+/* ---- v3.16: mobile feed mode (#/feed) ---- */
+let FEEDMODE=false,FEEDTIMER=null;
+function enterFeedMode(){
+  FEEDMODE=true;
+  const fc=_cardByHeader("recent activity");
+  if(fc)fc.classList.add("feedcard");
+  _abar();
+  abarName.textContent="Live Feed";
+  abarSub.textContent="all athletes · auto-refreshing";
+  document.querySelector(".abar button").textContent="← Full dashboard";
+  document.querySelector(".abar button").onclick=exitFeedMode;
+  document.body.classList.add("feed-mode");
+  if(location.hash!=="#/feed")history.pushState(null,"","#/feed");
+  loadFeed();
+  FEEDTIMER=setInterval(loadFeed,60000);
+}
+function exitFeedMode(){
+  FEEDMODE=false;
+  if(FEEDTIMER){clearInterval(FEEDTIMER);FEEDTIMER=null}
+  document.body.classList.remove("feed-mode");
+  const b=document.querySelector(".abar button");
+  b.textContent="← All Athletes"; b.onclick=exitAthleteMode;
+  history.pushState(null,"","#");
+}
+const _origHandleHash=handleHash;
+handleHash=function(){
+  if(location.hash==="#/feed"){enterFeedMode();return}
+  _origHandleHash.apply(this,arguments);
+};
+window.addEventListener("popstate",()=>{
+  if(FEEDMODE&&location.hash!=="#/feed")exitFeedMode();
+});
+</script>
+</body>
+</html>

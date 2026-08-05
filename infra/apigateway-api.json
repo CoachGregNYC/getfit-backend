@@ -1,0 +1,27 @@
+{
+    "ApiEndpoint": "https://tpvbxdx648.execute-api.us-east-1.amazonaws.com",
+    "ApiId": "tpvbxdx648",
+    "ApiKeySelectionExpression": "$request.header.x-api-key",
+    "CorsConfiguration": {
+        "AllowHeaders": [
+            "authorization",
+            "content-type"
+        ],
+        "AllowMethods": [
+            "GET",
+            "POST",
+            "OPTIONS"
+        ],
+        "AllowOrigins": [
+            "*"
+        ],
+        "MaxAge": 3600
+    },
+    "CreatedDate": "2026-07-03T13:44:38+00:00",
+    "DisableExecuteApiEndpoint": false,
+    "IpAddressType": "ipv4",
+    "Name": "getfit-api",
+    "ProtocolType": "HTTP",
+    "RouteSelectionExpression": "$request.method $request.path",
+    "Tags": {}
+}

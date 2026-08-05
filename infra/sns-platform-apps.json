@@ -1,0 +1,26 @@
+[
+    {
+        "Arn": "arn:aws:sns:us-east-1:446100759389:app/APNS/Heirloom-APNS-Production",
+        "Enabled": "true"
+    },
+    {
+        "Arn": "arn:aws:sns:us-east-1:446100759389:app/APNS/SPOT-APNS-v3",
+        "Enabled": "true"
+    },
+    {
+        "Arn": "arn:aws:sns:us-east-1:446100759389:app/APNS/getfit-apns-prod",
+        "Enabled": "true"
+    },
+    {
+        "Arn": "arn:aws:sns:us-east-1:446100759389:app/APNS_SANDBOX/Heirloom-APNS-Sandbox",
+        "Enabled": "true"
+    },
+    {
+        "Arn": "arn:aws:sns:us-east-1:446100759389:app/APNS_SANDBOX/SPOT-APNS-SANDBOX-v1",
+        "Enabled": "true"
+    },
+    {
+        "Arn": "arn:aws:sns:us-east-1:446100759389:app/APNS_SANDBOX/getfit-apns-sandbox",
+        "Enabled": "true"
+    }
+]

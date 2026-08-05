@@ -1,0 +1,257 @@
+[
+    {
+        "Route": "GET /coach/athletes",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/athletes/all",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/benchmarks",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/enrollments",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/feed",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/invites",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/plans",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/plans/usage",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/races",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/results",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /coach/schedule",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /me/benchmarks",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /me/enrollments",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /me/schedule",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /me/subscriptions",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "GET /plans",
+        "Target": "integrations/df0rfet",
+        "Auth": "NONE"
+    },
+    {
+        "Route": "GET /plans/{planId}",
+        "Target": "integrations/df0rfet",
+        "Auth": "NONE"
+    },
+    {
+        "Route": "GET /wod/today",
+        "Target": "integrations/j07fl6k",
+        "Auth": "NONE"
+    },
+    {
+        "Route": "POST /auth/apple/register",
+        "Target": "integrations/7gup9r7",
+        "Auth": "NONE"
+    },
+    {
+        "Route": "POST /coach/assign",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/athletes/archive",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/athletes/create",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/athletes/delete",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/enrollments/end",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/move",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/plans/publish",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/plans/rename",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/plans/upload",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/races/add",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/races/remove",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/sessions/create",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/sessions/update",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /coach/subscriptions/grant",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /devices",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /enrollments",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /invites/redeem",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "NONE"
+    },
+    {
+        "Route": "POST /logs",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /me/benchmarks",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /me/link-coach",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /me/notification-settings",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /me/profile",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /me/sessions",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /photos/presign",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /photos/view",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /sessions/move",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /signup",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "NONE"
+    },
+    {
+        "Route": "POST /subscriptions",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /subscriptions/cancel",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /subscriptions/unsubscribe",
+        "Target": "integrations/rlzw0ue",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /wod/subscribe",
+        "Target": "integrations/j07fl6k",
+        "Auth": "JWT"
+    },
+    {
+        "Route": "POST /wod/unsubscribe",
+        "Target": "integrations/j07fl6k",
+        "Auth": "JWT"
+    }
+]

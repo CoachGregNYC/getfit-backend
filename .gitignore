@@ -1,0 +1,21 @@
+# vendored python deps — rebuild with pip install -r requirements.txt -t .
+lambdas/*/boto3/
+lambdas/*/botocore/
+lambdas/*/cryptography/
+lambdas/*/jwt/
+lambdas/*/PyJWT*/
+lambdas/*/cffi*/
+lambdas/*/_cffi*/
+lambdas/*/pycparser/
+lambdas/*/*.dist-info/
+lambdas/*/*.egg-info/
+lambdas/*/__pycache__/
+**/__pycache__/
+*.pyc
+*.zip
+
+.DS_Store
+*.swp
+.env
+credentials
+.backup-*.html

@@ -1,0 +1,20 @@
+{
+  "FunctionName": "getfit-athleteApi",
+  "Runtime": "python3.12",
+  "Handler": "lambda_function.lambda_handler",
+  "Role": "arn:aws:iam::446100759389:role/GetFitLambdaRole",
+  "Timeout": 30,
+  "MemorySize": 256,
+  "Architectures": [
+    "x86_64"
+  ],
+  "Environment": {
+    "Variables": {
+      "POOL_ID": "us-east-1_zYTdHaJfo",
+      "PHOTO_BUCKET": "getfit-photos-446100759389",
+      "APNS_PLATFORM_ARN": "arn:aws:sns:us-east-1:446100759389:app/APNS_SANDBOX/getfit-apns-sandbox"
+    }
+  },
+  "CodeSha256": "LtIRvWOCi4YmzxFWSUE1JtF8rxZiagEtnCujC/EALVk=",
+  "LastModified": "2026-08-05T23:06:36.000+0000"
+}
