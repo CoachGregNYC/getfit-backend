@@ -770,13 +770,22 @@ def lambda_handler(event, context):
                                "logged": ls in ("complete", "missed")})
         if rk == "POST /me/profile":
             b = _body(event)
-            allowed = {k: str(b[k])[:80] for k in ("nickname", "firstName", "lastName") if k in b}
+            allowed = {k: str(b[k])[:80] for k in ("nickname", "firstName", "lastName", "email") if k in b}  # v44-profile-email
             if not allowed: return _resp(400, {"error": "nothing to update"})
             upd = ", ".join(f"#{k} = :{k}" for k in allowed)
             TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": "PROFILE"},
                 UpdateExpression=f"SET {upd}",
                 ExpressionAttributeNames={f"#{k}": k for k in allowed},
                 ExpressionAttributeValues={f":{k}": v for k, v in allowed.items()})
+            _pe = (allowed.get("email") or "").strip()
+            if _pe:
+                try:
+                    IDP.admin_update_user_attributes(UserPoolId=POOL_ID,
+                        Username=claims.get("cognito:username") or claims.get("username") or sub,
+                        UserAttributes=[{"Name": "email", "Value": _pe},
+                                        {"Name": "email_verified", "Value": "true"}])
+                except Exception as e:
+                    print(f"v44 email attr update failed: {e}")
             return _resp(200, {"ok": True, "updated": list(allowed)})
         if rk == "GET /me/enrollments":
             r = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
