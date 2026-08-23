@@ -86,6 +86,10 @@ body.feed-mode .abar{display:flex}
   body.feed-mode .card.feedcard{margin:0;border-radius:10px}
   body.feed-mode .res{font-size:15px}
 }
+#calzone{align-items:flex-start}
+#calcol{min-width:0;flex:1 1 auto}
+#calcol .day{min-width:0;overflow:hidden}
+#panel{flex:0 0 360px;max-width:360px}
 </style>
 </head>
 <body>
@@ -665,6 +669,15 @@ function openSess(sk){
     ${s.logComment?`<p class="muted" style="margin-top:6px"><b>Athlete:</b> "${esc(s.logComment)}"</p>`:""}
     ${photos}
     <p style="margin:10px 0 4px"><b>Workout text</b> <span class="muted">(re-parsed on save — benchmark targets stay live)</span></p>
+    <div style="margin:6px 0">Type: <select id="etype">
+      ${["run","swim","bike","strength","conditioning","rest"].map(v=>
+        `<option value="${v}" ${(s.sessionType||"run")===v?"selected":""}>`+
+        v.charAt(0).toUpperCase()+v.slice(1)+`</option>`).join("")}
+    </select> <span id="etypehint" class="muted">${(function(){
+      var fw=((s.rawText||"").trim().split(/[\s\u2014]/)[0]||"").toUpperCase();
+      var sg={SWIM:"swim",BIKE:"bike",BRICK:"bike",RUN:"run",STRENGTH:"strength",
+        PLYO:"conditioning",CORE:"conditioning",RECOVERY:"rest",REST:"rest"}[fw];
+      return (sg&&sg!==(s.sessionType||"run"))?("text says "+fw):"";})()}</span></div>
     <textarea id="edraw">${esc(s.rawText||"")}</textarea>
     <div class="row" style="margin-top:10px">
       <label>Date:</label><input type="date" id="mvdate" value="${s.scheduledDate}">
@@ -675,6 +688,7 @@ function openSess(sk){
       <label class="muted"><input type="checkbox" id="ntf"> notify athlete</label>
     </div>
     <div id="emsg" class="muted" style="margin-top:8px"></div>`;
+  window._origRaw=(s.rawText||"");
   panel.style.display="block";
   render(new Date(cur.getFullYear(),cur.getMonth(),1),new Date(cur.getFullYear(),cur.getMonth()+1,0));
 }
@@ -682,8 +696,10 @@ async function saveSess(sk){
   const s=sessions.find(x=>x.SK===sk); if(!s)return;
   emsg.textContent="Saving…";
   const body={athleteSub:athlete.value,sessionSK:sk,
-    rawText:document.getElementById("edraw").value,
+    sessionType:document.getElementById("etype").value,
     notify:document.getElementById("ntf").checked};
+    var _raw=document.getElementById("edraw").value;
+    if(_raw!==window._origRaw)body.rawText=_raw;
   const nt=document.getElementById("etitle").value.trim();
   if(nt&&nt!==(s.coachTitle||s.title||""))body.title=nt;
   const nd=document.getElementById("mvdate").value;
