@@ -559,8 +559,18 @@ def lambda_handler(event, context):
                 asub = next(a["Value"] for a in u["User"]["Attributes"] if a["Name"] == "sub")
             except IDP.exceptions.UsernameExistsException:
                 return _resp(409, {"error": "username taken"})
-            IDP.admin_set_user_password(UserPoolId=POOL_ID, Username=username,
-                                        Password=password, Permanent=True)
+            try:  # v45-signup-guard
+                IDP.admin_set_user_password(UserPoolId=POOL_ID, Username=username,
+                                            Password=password, Permanent=True)
+            except IDP.exceptions.InvalidPasswordException:
+                IDP.admin_delete_user(UserPoolId=POOL_ID, Username=username)
+                return _resp(400, {"error": "Password needs at least 8 characters "
+                    "including an uppercase letter, a lowercase letter, and a number."})
+            except Exception as e:
+                print(f"v45 signup set-pw failed: {e}")
+                try: IDP.admin_delete_user(UserPoolId=POOL_ID, Username=username)
+                except Exception as e2: print(f"v45 orphan cleanup failed: {e2}")
+                return _resp(500, {"error": "Could not finish creating the account. Please try again."})
             TABLE.put_item(Item={"PK": f"USER#{asub}", "SK": "PROFILE", "itemType": "PROFILE",
                 "name": name, "username": username, "selfSignup": True,
                 **({"email": _su_email} if _su_email else {}),
@@ -1243,14 +1253,27 @@ def lambda_handler(event, context):
             b = _body(event)
             username = b["username"].strip().lower()
             name = b.get("name", username)
+            # v45-coach-email: coach-created athletes get a recoverable account
+            _cc_email = (b.get("email") or "").strip()
+            _cc_attrs = [{"Name": "preferred_username", "Value": name}] if name else []
+            if _cc_email:
+                _cc_attrs += [{"Name": "email", "Value": _cc_email},
+                              {"Name": "email_verified", "Value": "true"}]
             try:
                 u = IDP.admin_create_user(UserPoolId=POOL_ID, Username=username,
                     MessageAction="SUPPRESS",
-                    UserAttributes=[{"Name": "preferred_username", "Value": name}] if name else [])
+                    UserAttributes=_cc_attrs)  # v45-coach-email
                 asub = next(a["Value"] for a in u["User"]["Attributes"] if a["Name"] == "sub")
             except IDP.exceptions.UsernameExistsException:
                 g = IDP.admin_get_user(UserPoolId=POOL_ID, Username=username)
                 asub = next(a["Value"] for a in g["UserAttributes"] if a["Name"] == "sub")
+                if _cc_email:  # v45-coach-email exists-path
+                    try:
+                        IDP.admin_update_user_attributes(UserPoolId=POOL_ID, Username=username,
+                            UserAttributes=[{"Name": "email", "Value": _cc_email},
+                                            {"Name": "email_verified", "Value": "true"}])
+                    except Exception as e:
+                        print(f"v45 exists-path email update failed: {e}")
             # void older unredeemed invites for this athlete - one live key per door
             old_inv = TABLE.scan(FilterExpression="itemType = :t AND username = :u AND #us = :f",
                 ExpressionAttributeNames={"#us": "used"},
