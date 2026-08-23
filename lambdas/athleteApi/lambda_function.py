@@ -797,6 +797,33 @@ def lambda_handler(event, context):
                 except Exception as e:
                     print(f"v44 email attr update failed: {e}")
             return _resp(200, {"ok": True, "updated": list(allowed)})
+        if rk == "POST /me/enrollments/leave":  # v47-leave-plan
+            b = _body(event)
+            eid = b.get("enrollmentId")
+            if not eid: return _resp(400, {"error": "enrollmentId required"})
+            er2 = TABLE.get_item(Key={"PK": f"USER#{sub}", "SK": f"ENROLLMENT#{eid}"}).get("Item")
+            if not er2: return _resp(404, {"error": "enrollment not found"})
+            if er2.get("coachManaged"): return _resp(403, {"error": "coach-managed plans can't be left here"})
+            today_iso = _today().isoformat()
+            r2 = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
+                             Key("SK").begins_with("SCHED#"))
+            doomed = [s for s in r2.get("Items", [])
+                      if s.get("enrollmentId") == eid
+                      and (s.get("scheduledDate") or "") >= today_iso
+                      and s.get("logStatus") not in ("complete", "missed")
+                      and not s.get("logPieceResults") and not s.get("photoKeys")]
+            if len(doomed) > 400: return _resp(400, {"error": "safety cap exceeded"})
+            for s in doomed:
+                TABLE.delete_item(Key={"PK": s["PK"], "SK": s["SK"]},
+                    ConditionExpression="attribute_not_exists(logPieceResults) AND "
+                        "(attribute_not_exists(logStatus) OR logStatus = :p)",
+                    ExpressionAttributeValues={":p": "pending"})
+            TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": f"ENROLLMENT#{eid}"},
+                UpdateExpression="SET #st = :s, leftAt = :t",
+                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeValues={":s": "left",
+                    ":t": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+            return _resp(200, {"ok": True, "removed": len(doomed)})
         if rk == "GET /me/enrollments":
             r = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
                             Key("SK").begins_with("ENROLLMENT#"))
@@ -815,6 +842,31 @@ def lambda_handler(event, context):
                          if s.get("enrollmentId") not in managed
                          or (s.get("scheduledDate") or "") <= horizon]
                 count = len(items)
+            # v46-week-mask: marketplace/subscription content locks beyond this week;
+            # the plan's first week always unlocks. Dots+titles survive; content strips.
+            _mk = {}
+            for e in er.get("Items", []):
+                pid = e.get("planId")
+                if e.get("coachManaged") or pid in ("my-workouts", "coach-extras"): continue
+                _mk[e.get("enrollmentId")] = str(e.get("startDate") or e.get("firstSession")
+                    or e.get("firstSessionDate") or "")[:10]
+            if _mk:
+                _t2 = _today()
+                _hz = (_t2 + datetime.timedelta(days=(5 - _t2.weekday()) % 7)).isoformat()
+                for s in items:
+                    _eid = s.get("enrollmentId")
+                    if _eid not in _mk: continue
+                    _sd = (s.get("scheduledDate") or "")[:10]
+                    if not _sd or _sd <= _hz: continue
+                    _f = _mk[_eid]
+                    if _f:
+                        try:
+                            _fd = datetime.date.fromisoformat(_f)
+                            _w1 = (_fd + datetime.timedelta(days=(5 - _fd.weekday()) % 7)).isoformat()
+                            if _sd <= _w1: continue
+                        except ValueError: pass
+                    s.pop("rawText", None); s.pop("prescriptions", None)
+                    s["locked"] = True
             return _resp(200, {"sessions": items, "count": count})
         if rk == "POST /logs":
             b = _body(event)
