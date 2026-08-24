@@ -932,6 +932,8 @@ def lambda_handler(event, context):
             return _resp(200, {"ok": True, "deleted": k})
         if rk == "POST /photos/view":
             b = _body(event)
+            if not b.get("key", "").startswith(f"photos/{sub}/") and not _is_coach(event):  # v49-photo-owner
+                return _resp(403, {"error": "you can only view your own photos"})
             return _resp(200, {"viewUrl": S3.generate_presigned_url("get_object",
                 Params={"Bucket": BUCKET, "Key": b["key"]}, ExpiresIn=3600)})
 
