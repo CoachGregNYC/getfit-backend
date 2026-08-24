@@ -1330,6 +1330,51 @@ def lambda_handler(event, context):
             b = _body(event)
             nsk = _move(b["athleteSub"], b["sessionSK"], b["newDate"])
             return _resp(404, {"error": "not found"}) if not nsk else _resp(200, {"ok": True, "newSessionSK": nsk})
+        if rk == "POST /coach/plans/session/update":  # v51-plan-edit
+            b = _body(event)
+            pid = b.get("planId"); psk = b.get("sessionSK")
+            if not pid or not psk or not psk.startswith("SESSION"):
+                return _resp(400, {"error": "planId + sessionSK required"})
+            item = TABLE.get_item(Key={"PK": f"PLAN#{pid}", "SK": psk}).get("Item")
+            if not item: return _resp(404, {"error": "plan session not found"})
+            meta = TABLE.get_item(Key={"PK": f"PLAN#{pid}", "SK": "META"}).get("Item") or {}
+            sets = []; vals = {}
+            if "rawText" in b:
+                new_raw = b["rawText"]
+                st, bench = stype_bench(new_raw)
+                sets += ["rawText = :r", "prescriptions = :p", "sessionType = :st"]
+                vals[":r"] = new_raw
+                vals[":p"] = parse_cell_multi(new_raw, meta.get("category"))
+                vals[":st"] = st
+            _bst = b.get("sessionType")
+            if _bst in ("run", "swim", "bike", "strength", "rest", "conditioning"):
+                if "rawText" in b: vals[":st"] = _bst
+                else: sets.append("sessionType = :st"); vals[":st"] = _bst
+            _fin = vals.get(":st") or item.get("sessionType")
+            _mv = {"swim": "Swim", "bike": "Bike", "strength": "Strength",
+                   "conditioning": "Conditioning"}.get(_fin)
+            if _mv and ":p" in vals:
+                for _pp in (vals[":p"] or []):
+                    if isinstance(_pp, dict) and _pp.get("movement") in (None, "Run"):
+                        _pp["movement"] = _mv
+            if b.get("title"):
+                sets.append("title = :t"); vals[":t"] = b["title"]
+            if not sets: return _resp(400, {"error": "nothing to update"})
+            sets.append("templateEdited = :te"); vals[":te"] = True
+            TABLE.update_item(Key={"PK": f"PLAN#{pid}", "SK": psk},
+                UpdateExpression="SET " + ", ".join(sets),
+                ExpressionAttributeValues=vals)
+            return _resp(200, {"ok": True, "sessionType": vals.get(":st") or item.get("sessionType"),
+                "prescriptions": len(vals.get(":p") or []) if ":p" in vals else None})
+        if rk == "GET /coach/plans/detail":  # v50-plan-detail
+            q = event.get("queryStringParameters") or {}
+            pid = q.get("planId")
+            if not pid: return _resp(400, {"error": "planId required"})
+            r = TABLE.query(KeyConditionExpression=Key("PK").eq(f"PLAN#{pid}") &
+                            Key("SK").begins_with("SESSION"))
+            ss = sorted(r.get("Items", []), key=lambda s: int(s.get("dayOffset", 0)))
+            meta = TABLE.get_item(Key={"PK": f"PLAN#{pid}", "SK": "META"}).get("Item") or {}
+            return _resp(200, {"plan": meta, "sessions": ss, "count": len(ss)})
         if rk == "POST /coach/plans/upload":
             b = _body(event)
             out, err = write_plan(b["title"], b.get("category", "run"),

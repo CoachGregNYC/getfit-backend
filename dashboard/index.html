@@ -4,22 +4,43 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GET FIT — Coach Dashboard</title>
 <style>
-:root{--navy:#1B2A4A;--steel:#3E6391;--ice:#AEC3DC;--icet:#C9D8E8;--surf:#EEF1F4;--slate:#5B6B82;}
+:root{--navy:#1B2A4A;--mid:#22345A;--steel:#3E6391;--steel-h:#35547C;--ice:#AEC3DC;
+  --icet:#C9D8E8;--surf:#EEF1F4;--slate:#5B6B82;--orange:#C47317;--white:#fff;}
 *{box-sizing:border-box;margin:0;font-family:-apple-system,Helvetica,Arial,sans-serif}
-body{background:var(--surf);color:var(--navy)}
-header{background:var(--navy);color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
-header h1{font-size:20px}header .sub{color:var(--ice);font-size:12px}
-nav button{margin-left:8px}
+body{background:var(--surf);color:var(--navy);min-height:100vh}
 button{background:var(--steel);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer}
+button:hover{filter:brightness(.95)}
 button.ghost{background:var(--icet);color:var(--navy)}
 button.danger{background:#F3D9D9;color:#8B2E2E}
-button.nav-on{background:#fff;color:var(--navy)}
 input,select,textarea{padding:8px;border:1px solid var(--ice);border-radius:8px;font-size:14px;background:#fff;color:var(--navy)}
 textarea{width:100%;min-height:110px;font-family:inherit;resize:vertical}
-.wrap{max-width:1200px;margin:20px auto;padding:0 16px}
-.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(27,42,74,.08);margin-bottom:16px}
-#login{max-width:380px;margin:80px auto}
-#login h2{margin-bottom:12px}#login input{width:100%;margin-bottom:10px}
+
+/* v4.0 shell: fixed sidebar + main */
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:224px;background:var(--navy);
+  color:#fff;display:none;flex-direction:column;padding:22px 14px 16px;z-index:100}
+#sidebar .brand{display:flex;align-items:center;gap:10px;padding:0 6px 6px}
+#sidebar .brand img{width:52px;height:52px;border-radius:50%}
+#sidebar .brand .bt{font-weight:900;font-size:17px;letter-spacing:.03em;line-height:1.15}
+#sidebar .brand .bs{font-size:10px;color:var(--ice);letter-spacing:.12em;text-transform:uppercase}
+#sidebar nav{display:flex;flex-direction:column;gap:4px;margin-top:22px;flex:1}
+#sidebar nav button{background:none;color:rgba(255,255,255,.62);text-align:left;width:100%;
+  padding:11px 14px;border-radius:10px;font-weight:600;font-size:14px;display:flex;gap:10px;align-items:center}
+#sidebar nav button:hover{background:var(--mid);color:rgba(255,255,255,.9);filter:none}
+#sidebar nav button.nav-on{background:var(--steel);color:#fff}
+.sidefoot{border-top:1px solid rgba(255,255,255,.12);padding-top:12px;font-size:12px;color:rgba(255,255,255,.5)}
+.sidefoot .who{color:#fff;font-weight:700;font-size:13px;margin-bottom:2px}
+.sidefoot button{background:none;color:var(--ice);padding:6px 0;font-size:12px}
+.sidefoot button:hover{background:none;color:#fff;text-decoration:underline;filter:none}
+.main{min-width:0}
+body.authed .main{margin-left:224px}
+body.authed #sidebar{display:flex}
+.wrap{max-width:1280px;margin:20px auto;padding:0 22px}
+
+.card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 1px 4px rgba(27,42,74,.08);margin-bottom:16px}
+#login{max-width:380px;margin:80px auto;text-align:center}
+#login img{width:120px;height:120px;margin-bottom:10px}
+#login h2{margin-bottom:12px}#login input{width:100%;margin-bottom:10px;text-align:left}
+#login button{width:100%}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px}
 #cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
@@ -35,7 +56,7 @@ textarea{width:100%;min-height:110px;font-family:inherit;resize:vertical}
 .st.done{color:#4ADE80}.st.miss{color:#F87171}
 .chips{display:flex;gap:6px}.chip{width:34px;height:34px;border-radius:50%;border:1px solid var(--ice);background:#fff;color:var(--navy);cursor:pointer;font-size:12px}
 .chip.on{background:var(--steel);color:#fff;border-color:var(--steel)}
-#modal{position:fixed;inset:0;background:rgba(27,42,74,.5);display:none;align-items:center;justify-content:center;padding:16px}
+#modal{position:fixed;inset:0;background:rgba(27,42,74,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:200}
 #modal .card{max-width:560px;width:100%;max-height:85vh;overflow:auto}
 pre{white-space:pre-wrap;background:var(--surf);border-radius:8px;padding:10px;font-size:13px}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;color:#fff}
@@ -55,13 +76,16 @@ td,th{padding:8px;border-bottom:1px solid var(--icet);text-align:left}
 .res{border-bottom:1px solid var(--icet);padding:10px 0}
 .res:last-child{border-bottom:0}
 #calzone{display:flex;gap:16px;align-items:flex-start}
-#calcol{flex:1 1 70%;min-width:0}
-#panel{flex:0 0 30%;min-width:300px;max-width:440px;display:none;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+#calcol{flex:1 1 auto;min-width:0}
+#calcol .day{min-width:0;overflow:hidden}
+#panel{flex:0 0 360px;max-width:360px;min-width:300px;display:none;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
 #panel textarea{min-height:260px;font-size:14px;line-height:1.45}
 #panel h3{padding-right:24px}
 .panelx{float:right;background:none;border:0;color:var(--slate);font-size:20px;cursor:pointer;padding:0 4px}
 .sess.sel{outline:2px solid var(--navy);outline-offset:1px}
-@media(max-width:900px){#calzone{flex-direction:column}#panel{flex:1 1 auto;width:100%;max-width:none;min-width:0;position:static;max-height:none}}
+@media(max-width:900px){#calzone{flex-direction:column}#panel{flex:1 1 auto;width:100%;max-width:none;min-width:0;position:static;max-height:none}
+  body.authed .main{margin-left:0}body.authed #sidebar{position:static;width:100%;flex-direction:row;align-items:center;padding:10px 14px;gap:10px}
+  #sidebar nav{flex-direction:row;margin-top:0;flex:0}.sidefoot{border:0;padding:0;margin-left:auto}}
 
 .abar{display:none;position:sticky;top:0;z-index:50;background:var(--navy);color:#fff;
   padding:10px 18px;border-radius:12px;margin-bottom:14px;align-items:center;gap:14px}
@@ -86,24 +110,55 @@ body.feed-mode .abar{display:flex}
   body.feed-mode .card.feedcard{margin:0;border-radius:10px}
   body.feed-mode .res{font-size:15px}
 }
-#calzone{align-items:flex-start}
-#calcol{min-width:0;flex:1 1 auto}
-#calcol .day{min-width:0;overflow:hidden}
-#panel{flex:0 0 360px;max-width:360px}
+
+/* sidebar groups */
+.caret{margin-left:auto;font-size:11px;opacity:.7}
+.sgroup{display:flex;flex-direction:column;gap:1px;margin:2px 0 6px;max-height:40vh;overflow-y:auto}
+.sgroup.collapsed{display:none}
+.sitem{background:none;color:rgba(255,255,255,.55);text-align:left;width:100%;
+  padding:6px 14px 6px 26px;border-radius:8px;font-size:13px;font-weight:500;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sitem:hover{background:var(--mid);color:rgba(255,255,255,.9);filter:none}
+.sitem.on{background:rgba(255,255,255,.14);color:#fff;font-weight:700}
+.sitem.addrow{color:var(--ice);font-weight:700}
+.planhero{background:linear-gradient(135deg,var(--navy),var(--steel));color:#fff;border-radius:16px;
+  padding:18px 20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.planhero h2{font-size:20px}
+.planhero .pm{color:var(--icet);font-size:13px;margin-top:3px}
+.planhero .pill{background:rgba(255,255,255,.15);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700}
+
+.scat{padding:8px 14px 3px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.4);font-weight:700}
+.pgrid{display:grid;grid-template-columns:52px repeat(7,1fr);gap:4px}
+.pgh{font-size:11px;color:var(--slate);font-weight:700;text-align:center;padding:2px 0}
+.pgw{font-size:11px;color:var(--slate);font-weight:700;display:flex;align-items:center;justify-content:center}
+.pgc{min-height:54px;background:var(--surf);border:1px solid var(--icet);border-radius:8px;padding:3px;display:flex;flex-direction:column;gap:3px}
+.pgs{border-radius:5px;color:#fff;font-size:11px;padding:3px 5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:default}
+.pgflag{color:var(--orange);font-weight:900;margin-right:3px}
 </style>
 </head>
 <body>
-<header>
-  <div><h1>GET FIT</h1><div class="sub">Coach Dashboard</div></div>
-  <nav id="topnav" style="display:none">
-    <button id="navCal" class="nav-on" onclick="show('cal')">Calendar</button>
-    <button id="navProg" onclick="show('prog')">Programs</button>
-    <span id="who" class="sub" style="margin-left:14px"></span>
+<aside id="sidebar">
+  <div class="brand">
+    <img src="coaching-icon.png" alt="" onerror="this.style.display='none'">
+    <div><div class="bt">GET FIT</div><div class="bs">Coach Dashboard</div></div>
+  </div>
+  <nav id="topnav">
+    <button id="navCal" class="nav-on" onclick="show('cal');toggleGroup('ath')">Athletes <span class="caret" id="caretAth">▾</span></button>
+    <div class="sgroup" id="groupAth"></div>
+    <button id="navProg" onclick="show('prog');toggleGroup('pl')">Plans <span class="caret" id="caretPl">▸</span></button>
+    <div class="sgroup collapsed" id="groupPl"></div>
   </nav>
-</header>
+  <div class="sidefoot">
+    <div class="who" id="who"></div>
+    <button onclick="signOutDash()">Sign out</button>
+    <div>v4.0.2</div>
+  </div>
+</aside>
+<div class="main">
 
 <div class="wrap">
   <div id="login" class="card">
+    <img src="coaching-icon.png" alt="GET FIT" onerror="this.style.display='none'">
     <h2>Coach Sign In</h2>
     <input id="u" placeholder="Username" value="coachgreg">
     <input id="p" type="password" placeholder="Password">
@@ -259,21 +314,39 @@ let TOKEN=null,MYSUB=null,cur=new Date(),plans=[],sessions=[],names={},UNAMES={}
 const COLORS=["#3E6391","#3E7D5B","#C07840","#7A5480","#3E7D8A","#6B7280"];
 const planColor=t=>{let h=0;for(const c of t)h=(h*31+c.charCodeAt(0))>>>0;return COLORS[h%COLORS.length]};
 const esc=t=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
+async function _refresh(){
+  const rt=localStorage.getItem("gf_rt"); if(!rt)return false;
+  const d=await _cog("InitiateAuth",{AuthFlow:"REFRESH_TOKEN_AUTH",ClientId:CLIENT_ID,
+    AuthParameters:{REFRESH_TOKEN:rt}}).catch(()=>null);
+  if(!d||!d.AuthenticationResult)return false;
+  TOKEN=d.AuthenticationResult.IdToken; return true;
+}
+function signOutDash(){localStorage.removeItem("gf_rt");localStorage.removeItem("gf_user");location.reload();}
+window.addEventListener("load",async()=>{
+  if(await _refresh()){await _enter(localStorage.getItem("gf_user")||"coach");}
+  setInterval(_refresh, 50*60*1000);
+});
 const api=(p,o={})=>fetch(API+p,{...o,headers:{...(o.headers||{}),
   "Authorization":"Bearer "+TOKEN,"Content-Type":"application/json"}}).then(r=>r.json());
 
+function _cog(target,payload){return fetch(COG,{method:"POST",
+  headers:{"Content-Type":"application/x-amz-json-1.1",
+  "X-Amz-Target":"AWSCognitoIdentityProviderService."+target},
+  body:JSON.stringify(payload)}).then(r=>r.json());}
+async function _enter(username){
+  MYSUB=JSON.parse(atob(TOKEN.split(".")[1])).sub;
+  who.textContent=username; login.style.display="none";
+  document.body.classList.add("authed"); show("cal");
+  await loadPlans(); await loadAthletes(); loadInvites(); await loadAllAthletes(); loadFeed(); athleteChanged(); handleHash();
+}
 async function signIn(){
-  const r=await fetch(COG,{method:"POST",headers:{"Content-Type":"application/x-amz-json-1.1",
-    "X-Amz-Target":"AWSCognitoIdentityProviderService.InitiateAuth"},
-    body:JSON.stringify({AuthFlow:"USER_PASSWORD_AUTH",ClientId:CLIENT_ID,
-      AuthParameters:{USERNAME:u.value,PASSWORD:p.value}})});
-  const d=await r.json();
+  const d=await _cog("InitiateAuth",{AuthFlow:"USER_PASSWORD_AUTH",ClientId:CLIENT_ID,
+    AuthParameters:{USERNAME:u.value,PASSWORD:p.value}});
   if(!d.AuthenticationResult){lerr.textContent=d.message||"Sign-in failed";return}
   TOKEN=d.AuthenticationResult.IdToken;
-  MYSUB=JSON.parse(atob(TOKEN.split(".")[1])).sub;
-  who.textContent=u.value; login.style.display="none";
-  topnav.style.display="block"; show("cal");
-  await loadPlans(); await loadAthletes(); loadInvites(); await loadAllAthletes(); loadFeed(); athleteChanged(); handleHash();
+  localStorage.setItem("gf_rt",d.AuthenticationResult.RefreshToken||"");
+  localStorage.setItem("gf_user",u.value);
+  await _enter(u.value);
 }
 function show(v){
   document.getElementById("view-cal").style.display = v==="cal"?"block":"none";
@@ -402,10 +475,10 @@ function openDeleteAthlete(dsub){
   const nm=names[dsub]||(PROFS[dsub]||{}).name||dsub.slice(0,8);
   mbody.innerHTML=`<h3 style="color:#8B2E2E">Delete ${esc(nm)} — permanently</h3>
     <p style="margin:10px 0">This erases their account, sign-in, all training data, logged history, and any invite codes. <b>There is no undo.</b> (Archive is the reversible option.)</p>
-    <p class="muted" style="margin-bottom:6px">Type <b>DELETE</b> and enter YOUR coach password to confirm:</p>
+    <p class="muted" style="margin-bottom:6px">Type <b>DELETE</b> to confirm:</p>
     <div class="row" style="margin-bottom:8px">
       <input id="dconfirm" placeholder="Type DELETE" style="min-width:140px">
-      <input id="dpass" type="password" placeholder="Coach password" style="min-width:180px">
+      
     </div>
     <div class="row">
       <button class="danger" onclick='doDeleteAthlete("${dsub}","${esc(nm)}")'>Delete permanently</button>
@@ -416,14 +489,6 @@ function openDeleteAthlete(dsub){
 }
 async function doDeleteAthlete(dsub,nm){
   if(dconfirm.value.trim()!=="DELETE"){dmsg.textContent='Type DELETE exactly to confirm.';return}
-  if(!dpass.value){dmsg.textContent="Coach password required.";return}
-  dmsg.textContent="Verifying password…";
-  const vr=await fetch(COG,{method:"POST",headers:{"Content-Type":"application/x-amz-json-1.1",
-    "X-Amz-Target":"AWSCognitoIdentityProviderService.InitiateAuth"},
-    body:JSON.stringify({AuthFlow:"USER_PASSWORD_AUTH",ClientId:CLIENT_ID,
-      AuthParameters:{USERNAME:"coachgreg",PASSWORD:dpass.value}})});
-  const vd=await vr.json();
-  if(!vd.AuthenticationResult){dmsg.textContent="Password incorrect — nothing deleted.";return}
   dmsg.textContent="Deleting…";
   const d=await api("/coach/athletes/delete",{method:"POST",body:JSON.stringify({athleteSub:dsub})});
   if(d.ok){
@@ -1018,5 +1083,91 @@ window.addEventListener("popstate",()=>{
   if(FEEDMODE&&location.hash!=="#/feed")exitFeedMode();
 });
 </script>
+<script>
+/* ---- v4.0 sidebar navigator ---- */
+const GROUPS={ath:true,pl:false};
+function toggleGroup(g,forceOpen){
+  GROUPS[g]=forceOpen===true?true:!GROUPS[g];
+  document.getElementById(g==="ath"?"groupAth":"groupPl").classList.toggle("collapsed",!GROUPS[g]);
+  document.getElementById(g==="ath"?"caretAth":"caretPl").textContent=GROUPS[g]?"▾":"▸";
+}
+function renderSideAth(){
+  const el=document.getElementById("groupAth"); if(!el||typeof athlete==="undefined")return;
+  el.innerHTML=[...athlete.options].map(o=>{
+    const label=o.value===MYSUB?"Me (coach)":esc(o.text.split(" — ")[0]);
+    return `<button class="sitem${o.value===athlete.value?" on":""}" onclick='show("cal");selectAthlete("${o.value}")'>${label}</button>`;
+  }).join("")+`<button class="sitem addrow" onclick='show("cal");openAddAthlete()'>+ Athlete</button>`;
+}
+let SELPLAN=null;
+function planGroup(p){
+  const mkt=p.isPublished||(p.priceMonthly!==undefined&&p.priceMonthly!==null);
+  if(!mkt)return "Custom";
+  const c=String(p.category||"").toLowerCase();
+  if(c.startsWith("tri"))return "Triathlon";
+  return c?c[0].toUpperCase()+c.slice(1):"Other";
+}
+function renderSidePlans(){
+  const el=document.getElementById("groupPl"); if(!el||typeof plans==="undefined")return;
+  const by={};
+  plans.forEach(p=>{(by[planGroup(p)]=by[planGroup(p)]||[]).push(p);});
+  const order=Object.keys(by).sort((a,b)=>(a==="Custom")-(b==="Custom")||a.localeCompare(b));
+  el.innerHTML=order.map(g=>
+    `<div class="scat">${g}</div>`+by[g].sort((a,b)=>a.title<b.title?-1:1).map(p=>
+      `<button class="sitem${p.planId===SELPLAN?" on":""}" onclick='selPlan("${p.planId}")'>${esc(p.title)}</button>`).join("")
+  ).join("");
+}
+const STYPE_COLORS={run:"#3E6391",swim:"#3E7D8A",strength:"#7A5480",erg:"#C07840",
+  conditioning:"#3E7D5B",bike:"#6B7280",rest:"#9AA6B2"};
+async function loadPlanGrid(pid){
+  const zone=document.getElementById("planGrid");
+  zone.innerHTML='<div class="muted">Loading plan sessions…</div>';
+  const d=await api("/coach/plans/detail?planId="+encodeURIComponent(pid)).catch(()=>null);
+  if(!d||d.error||!Array.isArray(d.sessions)){
+    zone.innerHTML='<div class="muted">Plan detail not available'+(d&&d.error?": "+esc(d.error):"")+'</div>';return;}
+  if(!d.sessions.length){zone.innerHTML='<div class="muted">No sessions in this plan.</div>';return;}
+  const weeks={};
+  d.sessions.forEach(s=>{
+    const off=parseInt(s.dayOffset||0,10);
+    const w=Math.floor(off/7)+1, day=off%7;
+    (weeks[w]=weeks[w]||{})[day]=(weeks[w][day]||[]).concat(s);
+  });
+  const wk=Object.keys(weeks).map(Number).sort((a,b)=>a-b);
+  zone.innerHTML=`<div class="card"><h3>Plan calendar <span class="muted">(week × day — generic, not date-anchored)</span></h3>
+    <div class="pgrid">
+    <div class="pgh"></div>`+[1,2,3,4,5,6,7].map(d2=>`<div class="pgh">Day ${d2}</div>`).join("")+
+    wk.map(w=>`<div class="pgw">Wk ${w}</div>`+[0,1,2,3,4,5,6].map(day=>{
+      const ss=(weeks[w]||{})[day]||[];
+      return `<div class="pgc">`+ss.map(s=>{
+        const ty=String(s.sessionType||"").toLowerCase();
+        const col=STYPE_COLORS[ty]||"#5B6B82";
+        const flag=(s.rawText||"").trim().toLowerCase().split(/[\s:]/)[0];
+        const mismatch=flag&&STYPE_COLORS[flag]&&flag!==ty;
+        return `<div class="pgs" style="background:${col}" title="${esc((s.rawText||"").slice(0,300))}">
+          ${mismatch?'<span class="pgflag">⚠</span>':""}${esc(s.title||ty||"session")}</div>`;
+      }).join("")+`</div>`;
+    }).join("")).join("")+`</div></div>`;
+}
+function selPlan(pid){
+  SELPLAN=pid; show("prog"); toggleGroup("pl",true); renderSidePlans();
+  const p=plans.find(x=>x.planId===pid); if(!p)return;
+  const u=(typeof USAGE!=="undefined"&&USAGE[pid])||{};
+  let hero=document.getElementById("planHero");
+  const vp=document.getElementById("view-prog");
+  if(!hero){hero=document.createElement("div");hero.id="planHero";vp.insertBefore(hero,vp.firstChild);}
+  const price=(p.priceMonthly!==undefined&&p.priceMonthly!==null)?(Number(p.priceMonthly)>0?`$${p.priceMonthly}/mo`:"Free"):"";
+  hero.innerHTML=`<div class="planhero"><div><h2>${esc(p.title)}</h2>
+    <div class="pm">${p.durationWeeks} weeks · ${esc(p.category)} · ${p.isFloatingSchedule?"floating":"fixed"} schedule${price?" · "+price:""}</div></div>
+    <div class="row"><span class="pill">${u.assigned||0} assigned</span>
+    <span class="pill">${p.isPublished?"Live":"Draft"}</span></div></div>`;
+  let gz=document.getElementById("planGrid");
+  if(!gz){gz=document.createElement("div");gz.id="planGrid";hero.after(gz);}
+  loadPlanGrid(pid);
+  hero.scrollIntoView({behavior:"smooth",block:"start"});
+}
+/* keep sidebar fresh: piggyback on existing render cycles */
+const _rc_v4=renderChips; renderChips=function(){_rc_v4();renderSideAth();};
+const _rl_v4=renderLib; renderLib=function(){_rl_v4();renderSidePlans();};
+</script>
+</div>
 </body>
 </html>
