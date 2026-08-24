@@ -156,7 +156,7 @@ body.feed-mode .abar{display:flex}
   <div class="sidefoot">
     <div class="who" id="who"></div>
     <button onclick="signOutDash()">Sign out</button>
-    <div>v4.0.5</div>
+    <div>v4.0.6</div>
   </div>
 </aside>
 <div class="main">
@@ -1191,6 +1191,7 @@ let PLANSESS={};
 function openPlanSess(sk){
   const s=PLANSESS[sk]; if(!s)return;
   const w=Math.floor(parseInt(s.dayOffset||0,10)/7)+1, d2=(parseInt(s.dayOffset||0,10)%7)+1;
+  const maxW=Math.max(6,...Object.values(PLANSESS).map(x=>Math.floor(parseInt(x.dayOffset||0,10)/7)+1));
   const types=["run","swim","bike","strength","rest","conditioning"];
   let pe=document.getElementById("planEdit");
   if(!pe){pe=document.createElement("div");pe.id="planEdit";pe.className="card";
@@ -1200,6 +1201,8 @@ function openPlanSess(sk){
     <div class="row" style="margin:10px 0">
       <input id="ptitle" placeholder="Title" value="${esc(s.title||"")}" style="flex:1;min-width:200px">
       <select id="ptype">${types.map(t=>`<option${(s.sessionType||"")===t?" selected":""}>${t}</option>`).join("")}</select>
+      <select id="pwk">${Array.from({length:maxW},(_,i)=>`<option value="${i+1}"${w===i+1?" selected":""}>Wk ${i+1}</option>`).join("")}</select>
+      <select id="pday">${[1,2,3,4,5,6,7].map(d3=>`<option value="${d3}"${d2===d3?" selected":""}>Day ${d3}</option>`).join("")}</select>
     </div>
     <textarea id="praw" placeholder="Workout text">${esc(s.rawText||"")}</textarea>
     <div class="muted" style="margin:6px 0 10px">Edits apply to the template — new enrollments see them; already-delivered weeks are untouched.</div>
@@ -1212,7 +1215,8 @@ async function savePlanSess(sk){
   pserr.textContent="Saving…";
   const d=await api("/coach/plans/session/update",{method:"POST",body:JSON.stringify({
     planId:SELPLAN,sessionSK:sk,title:ptitle.value,
-    sessionType:ptype.value,rawText:praw.value})}).catch(e=>({error:String(e)}));
+    sessionType:ptype.value,rawText:praw.value,
+    newDayOffset:(parseInt(pwk.value,10)-1)*7+(parseInt(pday.value,10)-1)})}).catch(e=>({error:String(e)}));
   if(d&&d.ok){planEdit.style.display="none";loadPlanGrid(SELPLAN);}
   else pserr.textContent=(d&&d.error)||"Save failed";
 }

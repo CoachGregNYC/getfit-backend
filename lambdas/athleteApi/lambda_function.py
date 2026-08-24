@@ -1330,6 +1330,17 @@ def lambda_handler(event, context):
             b = _body(event)
             nsk = _move(b["athleteSub"], b["sessionSK"], b["newDate"])
             return _resp(404, {"error": "not found"}) if not nsk else _resp(200, {"ok": True, "newSessionSK": nsk})
+        if rk == "POST /coach/plans/addweek":  # v53-add-week
+            b = _body(event)
+            pid = b.get("planId")
+            if not pid: return _resp(400, {"error": "planId required"})
+            meta = TABLE.get_item(Key={"PK": f"PLAN#{pid}", "SK": "META"}).get("Item")
+            if not meta: return _resp(404, {"error": "plan not found"})
+            nw = int(meta.get("durationWeeks", 0)) + 1
+            TABLE.update_item(Key={"PK": f"PLAN#{pid}", "SK": "META"},
+                UpdateExpression="SET durationWeeks = :w",
+                ExpressionAttributeValues={":w": nw})
+            return _resp(200, {"ok": True, "durationWeeks": nw})
         if rk == "POST /coach/plans/session/update":  # v51-plan-edit
             b = _body(event)
             pid = b.get("planId"); psk = b.get("sessionSK")
