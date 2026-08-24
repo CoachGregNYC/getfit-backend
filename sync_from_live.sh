@@ -6,7 +6,7 @@ cd "$(dirname "$0")" || exit 1
 mkdir -p lambdas/athleteApi lambdas/wod dashboard
 
 fail=0
-for FN in getfit-athleteApi getfit-wod; do
+for FN in getfit-athleteApi getfit-wod getfit-strava; do
   DIR="lambdas/${FN#getfit-}"
   URL=$(aws lambda get-function --function-name "$FN" --region "$REGION" \
         --query 'Code.Location' --output text) || { echo "ABORT: $FN fetch failed"; exit 1; }

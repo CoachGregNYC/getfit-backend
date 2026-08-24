@@ -156,7 +156,7 @@ body.feed-mode .abar{display:flex}
   <div class="sidefoot">
     <div class="who" id="who"></div>
     <button onclick="signOutDash()">Sign out</button>
-    <div>v4.0.6</div>
+    <div>v4.0.7</div>
   </div>
 </aside>
 <div class="main">
@@ -1103,7 +1103,13 @@ function renderSideAth(){
     return `<button class="sitem${o.value===athlete.value?" on":""}" onclick='show("cal");selectAthlete("${o.value}")'>${label}</button>`;
   }).join("")+`<button class="sitem addrow" onclick='show("cal");openAddAthlete()'>+ Athlete</button>`;
 }
-let SELPLAN=null;
+let SELPLAN=null,PLANMETA={};
+async function addWeek(){
+  const d=await api("/coach/plans/addweek",{method:"POST",
+    body:JSON.stringify({planId:SELPLAN})}).catch(e=>({error:String(e)}));
+  if(d&&d.ok){await loadPlans();selPlan(SELPLAN);}
+  else alert((d&&d.error)||"add week failed");
+}
 function planGroup(p){
   const mkt=p.isPublished||(p.priceMonthly!==undefined&&p.priceMonthly!==null);
   if(!mkt)return "Custom";
@@ -1136,14 +1142,17 @@ async function loadPlanGrid(pid){
     zone.innerHTML='<div class="muted">Plan detail not available'+(d&&d.error?": "+esc(d.error):"")+'</div>';return;}
   if(!d.sessions.length){zone.innerHTML='<div class="muted">No sessions in this plan.</div>';return;}
   PLANSESS={}; d.sessions.forEach(s=>PLANSESS[s.SK]=s);
+  PLANMETA=d.plan||{};
   const weeks={};
   d.sessions.forEach(s=>{
     const off=parseInt(s.dayOffset||0,10);
     const w=Math.floor(off/7)+1, day=off%7;
     (weeks[w]=weeks[w]||{})[day]=(weeks[w][day]||[]).concat(s);
   });
-  const wk=Object.keys(weeks).map(Number).sort((a,b)=>a-b);
-  zone.innerHTML=`<div class="card"><h3>Plan calendar <span class="muted">(week × day — generic, not date-anchored)</span></h3>
+  const _sm=Math.max(0,...Object.keys(weeks).map(Number));
+  const _mw=Math.max(_sm,parseInt(PLANMETA.durationWeeks||0,10));
+  const wk=Array.from({length:_mw},(_,i)=>i+1);
+  zone.innerHTML=`<div class="card"><h3>Plan calendar <span class="muted">(week × day — generic, not date-anchored)</span><button class="ghost" style="float:right;padding:4px 12px" onclick='addWeek()'>+ Week</button></h3>
     <div class="pgrid">
     <div class="pgh"></div>`+[1,2,3,4,5,6,7].map(d2=>`<div class="pgh">Day ${d2}</div>`).join("")+
     wk.map(w=>`<div class="pgw">Wk ${w}</div>`+[0,1,2,3,4,5,6].map(day=>{
@@ -1191,7 +1200,7 @@ let PLANSESS={};
 function openPlanSess(sk){
   const s=PLANSESS[sk]; if(!s)return;
   const w=Math.floor(parseInt(s.dayOffset||0,10)/7)+1, d2=(parseInt(s.dayOffset||0,10)%7)+1;
-  const maxW=Math.max(6,...Object.values(PLANSESS).map(x=>Math.floor(parseInt(x.dayOffset||0,10)/7)+1));
+  const maxW=Math.max(parseInt(PLANMETA.durationWeeks||0,10)||6,...Object.values(PLANSESS).map(x=>Math.floor(parseInt(x.dayOffset||0,10)/7)+1));
   const types=["run","swim","bike","strength","rest","conditioning"];
   let pe=document.getElementById("planEdit");
   if(!pe){pe=document.createElement("div");pe.id="planEdit";pe.className="card";
