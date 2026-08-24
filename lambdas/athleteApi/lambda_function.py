@@ -824,6 +824,39 @@ def lambda_handler(event, context):
                 ExpressionAttributeValues={":s": "left",
                     ":t": datetime.datetime.now(datetime.timezone.utc).isoformat()})
             return _resp(200, {"ok": True, "removed": len(doomed)})
+        if rk == "POST /me/account/delete":  # v48-account-delete
+            b = _body(event)
+            if b.get("confirm") != "DELETE":
+                return _resp(400, {"error": "confirmation required"})
+            # 1. every DynamoDB item under this user
+            _dd = 0; _lek = None
+            while True:
+                _kw = {"KeyConditionExpression": Key("PK").eq(f"USER#{sub}")}
+                if _lek: _kw["ExclusiveStartKey"] = _lek
+                _r = TABLE.query(**_kw)
+                for _it in _r.get("Items", []):
+                    TABLE.delete_item(Key={"PK": _it["PK"], "SK": _it["SK"]}); _dd += 1
+                _lek = _r.get("LastEvaluatedKey")
+                if not _lek: break
+            # 2. photos prefix in S3
+            _s3 = boto3.client("s3"); _pd = 0
+            try:
+                _pg = _s3.get_paginator("list_objects_v2")
+                for _pgr in _pg.paginate(Bucket="getfit-photos-446100759389", Prefix=f"photos/{sub}/"):
+                    _ks = [{"Key": o["Key"]} for o in _pgr.get("Contents", [])]
+                    if _ks:
+                        _s3.delete_objects(Bucket="getfit-photos-446100759389", Delete={"Objects": _ks})
+                        _pd += len(_ks)
+            except Exception as e:
+                print(f"v48 photo cleanup failed: {e}")
+            # 3. the Cognito user
+            _un = claims.get("cognito:username") or claims.get("username") or sub
+            try:
+                IDP.admin_delete_user(UserPoolId=POOL_ID, Username=_un)
+            except Exception as e:
+                print(f"v48 cognito delete failed: {e}")
+                return _resp(500, {"error": "account data removed but sign-in deletion failed; contact support"})
+            return _resp(200, {"ok": True, "itemsDeleted": _dd, "photosDeleted": _pd})
         if rk == "GET /me/enrollments":
             r = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
                             Key("SK").begins_with("ENROLLMENT#"))
