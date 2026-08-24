@@ -132,8 +132,13 @@ body.feed-mode .abar{display:flex}
 .pgh{font-size:11px;color:var(--slate);font-weight:700;text-align:center;padding:2px 0}
 .pgw{font-size:11px;color:var(--slate);font-weight:700;display:flex;align-items:center;justify-content:center}
 .pgc{min-height:54px;background:var(--surf);border:1px solid var(--icet);border-radius:8px;padding:3px;display:flex;flex-direction:column;gap:3px}
-.pgs{border-radius:5px;color:#fff;font-size:11px;padding:3px 5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:default}
+.pgs{border-radius:5px;color:#fff;font-size:11px;padding:3px 5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer}
 .pgflag{color:var(--orange);font-weight:900;margin-right:3px}
+
+.heroedit{background:none;border:0;font-size:14px;cursor:pointer;padding:0 4px;opacity:.8}
+.heroedit:hover{opacity:1;background:none;filter:none}
+.pillbtn{cursor:pointer}
+.pillbtn:hover{background:rgba(255,255,255,.28)}
 </style>
 </head>
 <body>
@@ -151,7 +156,7 @@ body.feed-mode .abar{display:flex}
   <div class="sidefoot">
     <div class="who" id="who"></div>
     <button onclick="signOutDash()">Sign out</button>
-    <div>v4.0.2</div>
+    <div>v4.0.5</div>
   </div>
 </aside>
 <div class="main">
@@ -272,7 +277,7 @@ body.feed-mode .abar{display:flex}
   </div>
 
   <div id="view-prog" style="display:none">
-    <div class="card">
+    <div class="card" id="addProgCard" style="display:none">
       <h3>Add a Program</h3>
       <div class="row" style="margin-bottom:10px">
         <input id="upTitle" placeholder="Program title" style="min-width:240px">
@@ -286,7 +291,7 @@ body.feed-mode .abar{display:flex}
       </div>
       <div id="upmsg" class="muted" style="margin-top:8px"></div>
     </div>
-    <div class="card">
+    <div class="card" style="display:none">
       <h3>Program Library</h3>
       <table><thead><tr id="libHead">
         <th onclick="sortLib('title')">Title</th>
@@ -1114,7 +1119,12 @@ function renderSidePlans(){
   el.innerHTML=order.map(g=>
     `<div class="scat">${g}</div>`+by[g].sort((a,b)=>a.title<b.title?-1:1).map(p=>
       `<button class="sitem${p.planId===SELPLAN?" on":""}" onclick='selPlan("${p.planId}")'>${esc(p.title)}</button>`).join("")
-  ).join("");
+  ).join("")+`<button class="sitem addrow" onclick='showAddProgram()'>+ Plan</button>`;
+}
+function showAddProgram(){
+  show("prog");
+  const c=document.getElementById("addProgCard");
+  c.style.display="block"; c.scrollIntoView({behavior:"smooth",block:"start"});
 }
 const STYPE_COLORS={run:"#3E6391",swim:"#3E7D8A",strength:"#7A5480",erg:"#C07840",
   conditioning:"#3E7D5B",bike:"#6B7280",rest:"#9AA6B2"};
@@ -1125,6 +1135,7 @@ async function loadPlanGrid(pid){
   if(!d||d.error||!Array.isArray(d.sessions)){
     zone.innerHTML='<div class="muted">Plan detail not available'+(d&&d.error?": "+esc(d.error):"")+'</div>';return;}
   if(!d.sessions.length){zone.innerHTML='<div class="muted">No sessions in this plan.</div>';return;}
+  PLANSESS={}; d.sessions.forEach(s=>PLANSESS[s.SK]=s);
   const weeks={};
   d.sessions.forEach(s=>{
     const off=parseInt(s.dayOffset||0,10);
@@ -1142,10 +1153,19 @@ async function loadPlanGrid(pid){
         const col=STYPE_COLORS[ty]||"#5B6B82";
         const flag=(s.rawText||"").trim().toLowerCase().split(/[\s:]/)[0];
         const mismatch=flag&&STYPE_COLORS[flag]&&flag!==ty;
-        return `<div class="pgs" style="background:${col}" title="${esc((s.rawText||"").slice(0,300))}">
+        return `<div class="pgs" style="background:${col}" onclick='openPlanSess("${s.SK}")' title="${esc((s.rawText||"").slice(0,300))}">
           ${mismatch?'<span class="pgflag">⚠</span>':""}${esc(s.title||ty||"session")}</div>`;
       }).join("")+`</div>`;
     }).join("")).join("")+`</div></div>`;
+}
+async function heroRename(pid){
+  const p=plans.find(x=>x.planId===pid); if(!p)return;
+  await renamePlan(pid,p.title);
+  setTimeout(()=>selPlan(pid),600);
+}
+async function heroPub(pid,pub){
+  await togglePub(pid,pub);
+  setTimeout(()=>selPlan(pid),600);
 }
 function selPlan(pid){
   SELPLAN=pid; show("prog"); toggleGroup("pl",true); renderSidePlans();
@@ -1155,10 +1175,11 @@ function selPlan(pid){
   const vp=document.getElementById("view-prog");
   if(!hero){hero=document.createElement("div");hero.id="planHero";vp.insertBefore(hero,vp.firstChild);}
   const price=(p.priceMonthly!==undefined&&p.priceMonthly!==null)?(Number(p.priceMonthly)>0?`$${p.priceMonthly}/mo`:"Free"):"";
-  hero.innerHTML=`<div class="planhero"><div><h2>${esc(p.title)}</h2>
+  hero.innerHTML=`<div class="planhero"><div><h2>${esc(p.title)} <button class="heroedit" title="Rename" onclick='heroRename("${pid}")'>✏️</button></h2>
     <div class="pm">${p.durationWeeks} weeks · ${esc(p.category)} · ${p.isFloatingSchedule?"floating":"fixed"} schedule${price?" · "+price:""}</div></div>
     <div class="row"><span class="pill">${u.assigned||0} assigned</span>
-    <span class="pill">${p.isPublished?"Live":"Draft"}</span></div></div>`;
+    <span class="pill pillbtn" onclick='heroPub("${pid}",${p.isPublished?"false":"true"})'>${p.isPublished?"Live ✓":"Draft — publish?"}</span></div></div>`;
+  const _pe=document.getElementById("planEdit"); if(_pe)_pe.style.display="none";
   let gz=document.getElementById("planGrid");
   if(!gz){gz=document.createElement("div");gz.id="planGrid";hero.after(gz);}
   loadPlanGrid(pid);
@@ -1166,6 +1187,35 @@ function selPlan(pid){
 }
 /* keep sidebar fresh: piggyback on existing render cycles */
 const _rc_v4=renderChips; renderChips=function(){_rc_v4();renderSideAth();};
+let PLANSESS={};
+function openPlanSess(sk){
+  const s=PLANSESS[sk]; if(!s)return;
+  const w=Math.floor(parseInt(s.dayOffset||0,10)/7)+1, d2=(parseInt(s.dayOffset||0,10)%7)+1;
+  const types=["run","swim","bike","strength","rest","conditioning"];
+  let pe=document.getElementById("planEdit");
+  if(!pe){pe=document.createElement("div");pe.id="planEdit";pe.className="card";
+    document.getElementById("planGrid").after(pe);}
+  pe.style.display="block";
+  pe.innerHTML=`<h3>Edit template session <span class="muted">Wk ${w} · Day ${d2}</span></h3>
+    <div class="row" style="margin:10px 0">
+      <input id="ptitle" placeholder="Title" value="${esc(s.title||"")}" style="flex:1;min-width:200px">
+      <select id="ptype">${types.map(t=>`<option${(s.sessionType||"")===t?" selected":""}>${t}</option>`).join("")}</select>
+    </div>
+    <textarea id="praw" placeholder="Workout text">${esc(s.rawText||"")}</textarea>
+    <div class="muted" style="margin:6px 0 10px">Edits apply to the template — new enrollments see them; already-delivered weeks are untouched.</div>
+    <div class="row"><button onclick='savePlanSess("${sk}")'>Save</button>
+    <button class="ghost" onclick='planEdit.style.display="none"'>Cancel</button>
+    <span id="pserr" class="err"></span></div>`;
+  pe.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+async function savePlanSess(sk){
+  pserr.textContent="Saving…";
+  const d=await api("/coach/plans/session/update",{method:"POST",body:JSON.stringify({
+    planId:SELPLAN,sessionSK:sk,title:ptitle.value,
+    sessionType:ptype.value,rawText:praw.value})}).catch(e=>({error:String(e)}));
+  if(d&&d.ok){planEdit.style.display="none";loadPlanGrid(SELPLAN);}
+  else pserr.textContent=(d&&d.error)||"Save failed";
+}
 const _rl_v4=renderLib; renderLib=function(){_rl_v4();renderSidePlans();};
 </script>
 </div>

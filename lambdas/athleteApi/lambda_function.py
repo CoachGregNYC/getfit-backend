@@ -1359,8 +1359,29 @@ def lambda_handler(event, context):
                         _pp["movement"] = _mv
             if b.get("title"):
                 sets.append("title = :t"); vals[":t"] = b["title"]
-            if not sets: return _resp(400, {"error": "nothing to update"})
+            _nd = b.get("newDayOffset")  # v52-plan-move
+            try: _nd = int(_nd) if _nd is not None else None
+            except (TypeError, ValueError): _nd = None
+            _cur = int(item.get("dayOffset", 0))
+            _moving = _nd is not None and 0 <= _nd and _nd != _cur
+            if not sets and not _moving:
+                return _resp(400, {"error": "nothing to update"})
             sets.append("templateEdited = :te"); vals[":te"] = True
+            if _moving:
+                _new = dict(item)
+                _new["dayOffset"] = _nd
+                if ":r" in vals: _new["rawText"] = vals[":r"]
+                if ":p" in vals: _new["prescriptions"] = vals[":p"]
+                if ":st" in vals: _new["sessionType"] = vals[":st"]
+                if ":t" in vals: _new["title"] = vals[":t"]
+                _new["templateEdited"] = True
+                _sfx = psk.split("#", 2)[2] if psk.count("#") >= 2 else psk
+                _nsk = f"SESSION#{_nd:04d}#{_sfx}"
+                _new["SK"] = _nsk
+                TABLE.put_item(Item=_new)
+                TABLE.delete_item(Key={"PK": f"PLAN#{pid}", "SK": psk})
+                return _resp(200, {"ok": True, "newSessionSK": _nsk,
+                    "sessionType": _new.get("sessionType")})
             TABLE.update_item(Key={"PK": f"PLAN#{pid}", "SK": psk},
                 UpdateExpression="SET " + ", ".join(sets),
                 ExpressionAttributeValues=vals)
