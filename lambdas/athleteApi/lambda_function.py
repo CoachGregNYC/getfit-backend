@@ -266,6 +266,10 @@ def materialize(user_sub, plan_id, start_str, chosen, coach_managed, coach_sub=N
         for s in sessions:
             dated.append((start + datetime.timedelta(days=int(s["dayOffset"])), s))
     enroll = {"PK": f"USER#{user_sub}", "SK": f"ENROLLMENT#{enroll_id}", "itemType": "ENROLLMENT",
+                **({"transactionId": b["transactionId"],
+                    "productId": b.get("productId", ""),
+                    "entitledAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}  # v54-entitlement
+                   if isinstance(b, dict) and b.get("transactionId") else {}),
               "enrollmentId": enroll_id, "planId": plan_id, "planTitle": meta.get("title",""),
               "startDate": start_str, "status": "active", "coachManaged": coach_managed,
               "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}
@@ -359,6 +363,10 @@ def create_subscription(user_sub, plan_id, start_str, chosen, coach_managed=Fals
            "coachManaged": coach_managed,
            "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}
     enroll = {"PK": f"USER#{user_sub}", "SK": f"ENROLLMENT#{enroll_id}", "itemType": "ENROLLMENT",
+                **({"transactionId": b["transactionId"],
+                    "productId": b.get("productId", ""),
+                    "entitledAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}  # v54-entitlement
+                   if isinstance(b, dict) and b.get("transactionId") else {}),
               "enrollmentId": enroll_id, "planId": plan_id, "planTitle": meta.get("title",""),
               "startDate": start_str, "status": "active", "coachManaged": coach_managed,
               "isSubscription": True,
@@ -738,7 +746,11 @@ def lambda_handler(event, context):
             if not eid:
                 eid = str(uuid.uuid4())
                 TABLE.put_item(Item={"PK": f"USER#{sub}", "SK": f"ENROLLMENT#{eid}",
-                    "itemType": "ENROLLMENT", "enrollmentId": eid, "planId": "my-workouts",
+                    "itemType": "ENROLLMENT",
+                **({"transactionId": b["transactionId"],
+                    "productId": b.get("productId", ""),
+                    "entitledAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}  # v54-entitlement
+                   if isinstance(b, dict) and b.get("transactionId") else {}), "enrollmentId": eid, "planId": "my-workouts",
                     "planTitle": "My Workouts", "startDate": date, "status": "active",
                     "coachManaged": False,
                     "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()})
@@ -1004,7 +1016,11 @@ def lambda_handler(event, context):
             if not eid:
                 eid = str(uuid.uuid4())
                 TABLE.put_item(Item={"PK": f"USER#{a}", "SK": f"ENROLLMENT#{eid}",
-                    "itemType": "ENROLLMENT", "enrollmentId": eid, "planId": "coach-extras",
+                    "itemType": "ENROLLMENT",
+                **({"transactionId": b["transactionId"],
+                    "productId": b.get("productId", ""),
+                    "entitledAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}  # v54-entitlement
+                   if isinstance(b, dict) and b.get("transactionId") else {}), "enrollmentId": eid, "planId": "coach-extras",
                     "planTitle": "Coach Extras", "startDate": date, "status": "active",
                     "coachManaged": True, "GSI1PK": f"COACH#{sub}",
                     "GSI1SK": f"ATHLETE#{a}#ENROLLMENT#{eid}",
