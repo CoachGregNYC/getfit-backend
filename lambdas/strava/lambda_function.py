@@ -11,10 +11,16 @@ SPORT = {"Run": "run", "VirtualRun": "run", "TrailRun": "run",
          "Swim": "swim", "Ride": "bike", "VirtualRide": "bike",
          "WeightTraining": "strength", "Workout": "conditioning"}
 
+from decimal import Decimal
+def _json_default(o):
+    if isinstance(o, Decimal):
+        return int(o) if o % 1 == 0 else float(o)
+    raise TypeError(f"not serializable: {type(o).__name__}")
+
 def _resp(code, body, headers=None):
     h = {"Content-Type": "application/json"}
     if headers: h.update(headers)
-    return {"statusCode": code, "headers": h, "body": json.dumps(body)}
+    return {"statusCode": code, "headers": h, "body": json.dumps(body, default=_json_default)}
 
 def _html(code, text):
     return {"statusCode": code, "headers": {"Content-Type": "text/html"},
