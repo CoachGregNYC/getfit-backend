@@ -244,7 +244,7 @@ def _move(user_sub, sk, new_date):
     TABLE.delete_item(Key={"PK": f"USER#{user_sub}", "SK": sk})
     return new_sk
 
-def materialize(user_sub, plan_id, start_str, chosen, coach_managed, coach_sub=None):
+def materialize(user_sub, plan_id, start_str, chosen, coach_managed, coach_sub=None, txn_id=None, product_id=None):
     meta, sessions = load_plan(plan_id)
     if not meta or not sessions: return None, "plan not found"
     start = datetime.date.fromisoformat(start_str)
@@ -266,13 +266,11 @@ def materialize(user_sub, plan_id, start_str, chosen, coach_managed, coach_sub=N
         for s in sessions:
             dated.append((start + datetime.timedelta(days=int(s["dayOffset"])), s))
     enroll = {"PK": f"USER#{user_sub}", "SK": f"ENROLLMENT#{enroll_id}", "itemType": "ENROLLMENT",
-                **({"transactionId": b["transactionId"],
-                    "productId": b.get("productId", ""),
-                    "entitledAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}  # v54-entitlement
-                   if isinstance(b, dict) and b.get("transactionId") else {}),
               "enrollmentId": enroll_id, "planId": plan_id, "planTitle": meta.get("title",""),
               "startDate": start_str, "status": "active", "coachManaged": coach_managed,
               "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    if txn_id: enroll["transactionId"] = txn_id
+    if product_id: enroll["productId"] = product_id
     if coach_sub:
         enroll["GSI1PK"] = f"COACH#{coach_sub}"
         enroll["GSI1SK"] = f"ATHLETE#{user_sub}#ENROLLMENT#{enroll_id}"
@@ -340,7 +338,7 @@ def deliver_sub_weeks(user_sub, sub, n_weeks=4):
             ExpressionAttributeValues={":w": new_done})
     return written
 
-def create_subscription(user_sub, plan_id, start_str, chosen, coach_managed=False, coach_sub=None, race_date=None, race_name=None):
+def create_subscription(user_sub, plan_id, start_str, chosen, coach_managed=False, coach_sub=None, race_date=None, race_name=None, txn_id=None, product_id=None):
     meta, _ = load_plan(plan_id)
     if not meta: return None, "plan not found"
     if meta.get("accessModel") != "subscription":
@@ -363,14 +361,16 @@ def create_subscription(user_sub, plan_id, start_str, chosen, coach_managed=Fals
            "coachManaged": coach_managed,
            "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}
     enroll = {"PK": f"USER#{user_sub}", "SK": f"ENROLLMENT#{enroll_id}", "itemType": "ENROLLMENT",
-                **({"transactionId": b["transactionId"],
-                    "productId": b.get("productId", ""),
-                    "entitledAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}  # v54-entitlement
-                   if isinstance(b, dict) and b.get("transactionId") else {}),
               "enrollmentId": enroll_id, "planId": plan_id, "planTitle": meta.get("title",""),
               "startDate": start_str, "status": "active", "coachManaged": coach_managed,
               "isSubscription": True,
               "createdAt": sub["createdAt"]}
+    if txn_id:
+        enroll["transactionId"] = txn_id
+        sub["transactionId"] = txn_id
+    if product_id:
+        enroll["productId"] = product_id
+        sub["productId"] = product_id
     if coach_sub:
         enroll["GSI1PK"] = f"COACH#{coach_sub}"
         enroll["GSI1SK"] = f"ATHLETE#{user_sub}#ENROLLMENT#{enroll_id}"
@@ -635,7 +635,7 @@ def lambda_handler(event, context):
                 start_str, rerr = _race_start(b["planId"], b["raceDate"], b.get("chosenWeekdays"))
                 if rerr: return _resp(400, {"error": rerr})
             out, err = create_subscription(sub, b["planId"], start_str, b.get("chosenWeekdays"),
-                                           race_date=b.get("raceDate"), race_name=b.get("raceName"))
+                                           race_date=b.get("raceDate"), race_name=b.get("raceName"), txn_id=b.get("transactionId"), product_id=b.get("productId"))
             if not err and b.get("raceDate"): out["computedStart"] = start_str
             return _resp(400, {"error": err}) if err else _resp(200, out)
         if rk == "GET /me/subscriptions":
@@ -706,7 +706,7 @@ def lambda_handler(event, context):
             if b.get("raceDate") and not start_str:
                 start_str, rerr = _race_start(b["planId"], b["raceDate"], b.get("chosenWeekdays"))
                 if rerr: return _resp(400, {"error": rerr})
-            out, err = materialize(sub, b["planId"], start_str, b.get("chosenWeekdays"), False)
+            out, err = materialize(sub, b["planId"], start_str, b.get("chosenWeekdays"), False, txn_id=b.get("transactionId"), product_id=b.get("productId"))
             if err: return _resp(404, {"error": err})
             if b.get("raceDate"):
                 out["computedStart"] = start_str
@@ -746,11 +746,7 @@ def lambda_handler(event, context):
             if not eid:
                 eid = str(uuid.uuid4())
                 TABLE.put_item(Item={"PK": f"USER#{sub}", "SK": f"ENROLLMENT#{eid}",
-                    "itemType": "ENROLLMENT",
-                **({"transactionId": b["transactionId"],
-                    "productId": b.get("productId", ""),
-                    "entitledAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}  # v54-entitlement
-                   if isinstance(b, dict) and b.get("transactionId") else {}), "enrollmentId": eid, "planId": "my-workouts",
+                    "itemType": "ENROLLMENT", "enrollmentId": eid, "planId": "my-workouts",
                     "planTitle": "My Workouts", "startDate": date, "status": "active",
                     "coachManaged": False,
                     "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()})
@@ -1016,11 +1012,7 @@ def lambda_handler(event, context):
             if not eid:
                 eid = str(uuid.uuid4())
                 TABLE.put_item(Item={"PK": f"USER#{a}", "SK": f"ENROLLMENT#{eid}",
-                    "itemType": "ENROLLMENT",
-                **({"transactionId": b["transactionId"],
-                    "productId": b.get("productId", ""),
-                    "entitledAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}  # v54-entitlement
-                   if isinstance(b, dict) and b.get("transactionId") else {}), "enrollmentId": eid, "planId": "coach-extras",
+                    "itemType": "ENROLLMENT", "enrollmentId": eid, "planId": "coach-extras",
                     "planTitle": "Coach Extras", "startDate": date, "status": "active",
                     "coachManaged": True, "GSI1PK": f"COACH#{sub}",
                     "GSI1SK": f"ATHLETE#{a}#ENROLLMENT#{eid}",
