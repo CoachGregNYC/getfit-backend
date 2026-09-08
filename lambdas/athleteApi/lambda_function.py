@@ -28,6 +28,8 @@ def _clean(o):
 def _resp(code, body):
     return {"statusCode": code, "headers": {"Content-Type": "application/json"},
             "body": json.dumps(_clean(body))}
+# v56-benchmark-delete
+# v57-row-brick-types
 def _claims(e): return e["requestContext"]["authorizer"]["jwt"]["claims"]
 def _is_coach(e): return "coaches" in str(_claims(e).get("cognito:groups", ""))
 def _body(e): return json.loads(e.get("body") or "{}", parse_float=Decimal)
@@ -734,7 +736,7 @@ def lambda_handler(event, context):
             date = b.get("date"); raw = (b.get("rawText") or "").strip()
             if not date or not raw: return _resp(400, {"error": "date and rawText required"})
             st, bench = stype_bench(raw)
-            if b.get("sessionType") in ("run", "swim", "bike", "strength", "rest", "conditioning"):
+            if b.get("sessionType") in ("run", "swim", "bike", "row", "brick", "strength", "rest", "conditioning"):
                 st = b["sessionType"]
             title = (b.get("title") or "").strip()[:60] or athlete_title(None, "", st, raw)
             eid = None
@@ -968,13 +970,13 @@ def lambda_handler(event, context):
             # v42-movement-fix: body sessionType wins over stype_bench guess;
             # prescriptions carry the final type's movement
             _bst = b.get("sessionType")
-            if _bst in ("run", "swim", "bike", "strength", "rest", "conditioning"):
+            if _bst in ("run", "swim", "bike", "row", "brick", "strength", "rest", "conditioning"):
                 if "rawText" in b:
                     vals[":st"] = _bst
                 else:
                     sets.append("sessionType = :st"); vals[":st"] = _bst
             _fin = vals.get(":st") or item.get("sessionType")
-            _mv = {"swim": "Swim", "bike": "Bike", "strength": "Strength",
+            _mv = {"swim": "Swim", "bike": "Bike", "row": "Row", "brick": "Brick", "strength": "Strength",
                    "conditioning": "Conditioning"}.get(_fin)
             if _mv and ":p" in vals:
                 for _pp in vals[":p"]:
@@ -1000,7 +1002,7 @@ def lambda_handler(event, context):
             b = _body(event)
             a = b["athleteSub"]; date = b["date"]; raw = b["rawText"]
             st, bench = stype_bench(raw)
-            if b.get("sessionType") in ("run", "swim", "bike", "strength", "rest", "conditioning"):
+            if b.get("sessionType") in ("run", "swim", "bike", "row", "brick", "strength", "rest", "conditioning"):
                 st = b["sessionType"]
             title = b.get("title") or athlete_title(None, "", st, raw)
             eid = None
@@ -1059,6 +1061,14 @@ def lambda_handler(event, context):
                 "dateISO": date_iso, "source": b.get("source","app"),
                 "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()})
             return _resp(200, {"ok": True})
+        if rk == "DELETE /me/benchmarks":  # v56-benchmark-delete
+            b = _body(event)
+            movement = b.get("movement")
+            date_iso = b.get("dateISO")
+            if not movement or not date_iso:
+                return _resp(400, {"error": "movement and dateISO required"})
+            TABLE.delete_item(Key={"PK": f"USER#{sub}", "SK": f"BENCH#{movement}#{date_iso}"})
+            return _resp(200, {"ok": True, "deleted": f"BENCH#{movement}#{date_iso}"})
         if rk == "GET /coach/enrollments":
             q = event.get("queryStringParameters") or {}
             a = q.get("athleteSub")
@@ -1366,11 +1376,11 @@ def lambda_handler(event, context):
                 vals[":p"] = parse_cell_multi(new_raw, meta.get("category"))
                 vals[":st"] = st
             _bst = b.get("sessionType")
-            if _bst in ("run", "swim", "bike", "strength", "rest", "conditioning"):
+            if _bst in ("run", "swim", "bike", "row", "brick", "strength", "rest", "conditioning"):
                 if "rawText" in b: vals[":st"] = _bst
                 else: sets.append("sessionType = :st"); vals[":st"] = _bst
             _fin = vals.get(":st") or item.get("sessionType")
-            _mv = {"swim": "Swim", "bike": "Bike", "strength": "Strength",
+            _mv = {"swim": "Swim", "bike": "Bike", "row": "Row", "brick": "Brick", "strength": "Strength",
                    "conditioning": "Conditioning"}.get(_fin)
             if _mv and ":p" in vals:
                 for _pp in (vals[":p"] or []):
