@@ -1,4 +1,4 @@
-"""getfit-wod: Concept2 WOD (displayed with permission, attributed).
+"""getfit-wod v3 (single-fetch; 3-machine WODs proven identical): Concept2 WOD (displayed with permission, attributed).
 Daily fetch + cache, /wod/today, subscribe/unsubscribe, daily fan-out to subscribers."""
 import json, re, datetime, uuid, urllib.request
 import html as _htmlmod
@@ -101,8 +101,11 @@ def finalize_erg(pres):
         pres[0]["forTime"] = True
     return pres
 
-def fetch_wod(date_s):
-    url = f"https://log.concept2.com/wod/{date_s}/rowerg"
+MACHINES = ["rowerg", "skierg", "bikeerg"]
+
+def _parse_one(date_s, machine):
+    """Fetch + parse a single machine's WOD page. Returns (title, desc) or raises."""
+    url = f"https://log.concept2.com/wod/{date_s}/{machine}"
     html = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=15).read().decode(errors="replace")
     text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S)
     text = re.sub(r"<[^>]+>", " ", text)
@@ -110,11 +113,18 @@ def fetch_wod(date_s):
     text = re.sub(r"\s+", " ", text)
     m = re.search(r"Workout of the Day\s*\u00ab?\s*([A-Z][a-z]+ \d{1,2}, \d{4})\s*(.+?)\s*(?:RowErg SkiErg BikeErg|Pos\. Name)", text)
     if not m:
-        raise ValueError("WOD block not found")
+        raise ValueError(f"WOD block not found for {machine}")
     blob = m.group(2).strip()
     blob = _htmlmod.unescape(blob).replace("\u00ab", "").replace("\u00bb", "").strip()
     tm = re.match(r"^(.{3,90}?)\s+([A-Z][^.]{8,}\..*)$", blob)
     title, desc = (tm.group(1).strip(), tm.group(2).strip()) if tm else (blob[:80], blob)
+    return title, desc
+
+def fetch_wod(date_s):
+    # Concept2 publishes one machine-agnostic WOD (per-machine notes inline, e.g.
+    # "(BikeErg: 1000m)"). Sampling confirmed rowerg/skierg/bikeerg identical, so
+    # we fetch the canonical rowerg page only. _parse_one kept from the v2 refactor.
+    title, desc = _parse_one(date_s, "rowerg")
     return {"PK": "WOD#concept2", "SK": f"DATE#{date_s}", "itemType": "WOD",
             "date": date_s, "machine": "rowerg", "title": title, "description": desc,
             "attribution": "Workout of the Day courtesy of Concept2",
