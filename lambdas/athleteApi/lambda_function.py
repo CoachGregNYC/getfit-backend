@@ -1,4 +1,12 @@
-"""GET FIT API v5 = v4 + rolling subscriptions.
+"""GET FIT API v59.1 = v59 + DEFAULT_COACH_SUB fallback (unlinked athletes' comments still reach the coach).
+GET FIT API v59 = v58 + workout comments (athlete <-> coach threads on a session; see _comment_add).
+  Rows: USER#<athlete> / CMT#<sessionUUID>#<ts>#<id>  {author, authorSub, authorName, text, createdAt, readByCoachAt, readByAthleteAt}
+  SCHED row gets commentCount, lastCommentAt, lastCommentBy, athleteUnread (coach msgs the athlete hasn't opened).
+  Coach inbox = GSI1 query CMTINBOX#<coachSub> (athlete-authored rows until the coach opens the thread).
+  Routes: GET/POST /me/comments  ·  GET /coach/comments/inbox  ·  GET/POST /coach/comments
+  POST /logs with a comment also starts the thread (message #0). Pushes carry kind=comment + sessionSK.
+GET FIT API v58 = v57 + last-seen/build stamping on PROFILE (see _stamp_last_seen).
+GET FIT API v5 = v4 + rolling subscriptions.
 New: POST /subscriptions {planId,startDate,chosenWeekdays?}   test-mode subscribe, delivers weeks 1-4
      GET  /me/subscriptions
      POST /subscriptions/cancel {planId}                       autoRenew off; delivered weeks stay
@@ -19,6 +27,30 @@ PLATFORM_ARN = os.environ.get("APNS_PLATFORM_ARN", "")
 PLATFORM_ARN_PROD = "arn:aws:sns:us-east-1:446100759389:app/APNS/getfit-apns-prod"
 BUCKET = os.environ.get("PHOTO_BUCKET", "")
 POOL_ID = os.environ.get("POOL_ID", "")
+
+# v58-last-seen: stamp who is on what build. Additive, non-fatal.
+# Reads X-App-Version / X-App-Build / X-OS-Version / X-Device-Model headers
+# (case-insensitive; sent by iOS build 20+). Attributes are only written when
+# the header is present, so older clients still refresh lastSeenAt without
+# blanking a version they never reported. firstSeenAt is set once.
+def _stamp_last_seen(event, user_sub):
+    try:
+        hdrs = {str(k).lower(): v for k, v in (event.get("headers") or {}).items() if k}
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        expr = ["lastSeenAt = :t", "firstSeenAt = if_not_exists(firstSeenAt, :t)"]
+        vals = {":t": now}
+        for hdr, attr, ph in (("x-app-version", "lastAppVersion", ":v"),
+                              ("x-app-build", "lastAppBuild", ":b"),
+                              ("x-os-version", "lastOSVersion", ":o"),
+                              ("x-device-model", "lastDeviceModel", ":d")):
+            val = str(hdrs.get(hdr) or "").strip()[:48]
+            if val:
+                expr.append(f"{attr} = {ph}"); vals[ph] = val
+        TABLE.update_item(Key={"PK": f"USER#{user_sub}", "SK": "PROFILE"},
+            UpdateExpression="SET " + ", ".join(expr),
+            ExpressionAttributeValues=vals)
+    except Exception as e:
+        print(f"[v58 last-seen] non-fatal: {e}")
 
 def _clean(o):
     if isinstance(o, list): return [_clean(x) for x in o]
@@ -503,6 +535,74 @@ def _notify(user_sub, title, body):
         return False
 
 
+# ---------- v59 workout comments ----------
+COACH_DISPLAY = os.environ.get("COACH_DISPLAY_NAME", "Coach Greg")
+DEFAULT_COACH_SUB = os.environ.get("DEFAULT_COACH_SUB", "")   # v59.1: inbox for athletes with no COACH# link
+
+def _push_data(user_sub, title, body, data):
+    """Like _notify but with custom keys (kind, sessionSK, ...) so a tap can open the session."""
+    try:
+        prof = TABLE.get_item(Key={"PK": f"USER#{user_sub}", "SK": "PROFILE"}).get("Item") or {}
+        ep = prof.get("endpointArn")
+        if not ep or prof.get("notificationsEnabled") is False: return False
+        aps = {"aps": {"alert": {"title": title, "body": body}, "sound": "default"}}; aps.update(data or {})
+        SNS.publish(TargetArn=ep, MessageStructure="json",
+            Message=json.dumps({"APNS": json.dumps(aps), "APNS_SANDBOX": json.dumps(aps), "default": body}))
+        return True
+    except Exception as e:
+        print(f"push_data skipped: {e}"); return False
+
+def _coach_of(athlete_sub):
+    prof = TABLE.get_item(Key={"PK": f"USER#{athlete_sub}", "SK": "PROFILE"}).get("Item") or {}
+    g = prof.get("GSI1PK") or ""
+    coach = g.replace("COACH#", "") if g.startswith("COACH#") else None
+    return (coach or DEFAULT_COACH_SUB or None), prof
+
+def _session_uuid(session_sk):
+    parts = session_sk.split("#"); return parts[-1] if len(parts) >= 3 else session_sk
+
+def _comment_add(athlete_sub, session_sk, author, author_sub, text, session=None):
+    """Append one message to a session thread. author in ('athlete','coach'). Returns the row."""
+    text = (text or "").strip()[:2000]
+    if not text: return None
+    if session is None:
+        session = TABLE.get_item(Key={"PK": f"USER#{athlete_sub}", "SK": session_sk}).get("Item")
+    if not session: return None
+    coach_sub, prof = _coach_of(athlete_sub)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cid = uuid.uuid4().hex[:8]
+    row = {"PK": f"USER#{athlete_sub}", "SK": f"CMT#{_session_uuid(session_sk)}#{now}#{cid}", "itemType": "CMT",
+           "sessionSK": session_sk, "sessionTitle": session.get("coachTitle") or session.get("title", ""),
+           "scheduledDate": session.get("scheduledDate", ""), "planTitle": session.get("planTitle", ""),
+           "author": author, "authorSub": author_sub,
+           "authorName": COACH_DISPLAY if author == "coach" else (prof.get("name") or prof.get("username") or "Athlete"),
+           "text": text, "createdAt": now}
+    if author == "athlete" and coach_sub:
+        row["GSI1PK"] = f"CMTINBOX#{coach_sub}"; row["GSI1SK"] = now   # sits in the coach inbox until opened
+    TABLE.put_item(Item=row)
+    upd = "SET commentCount = if_not_exists(commentCount, :z) + :one, lastCommentAt = :t, lastCommentBy = :a"
+    vals = {":z": 0, ":one": 1, ":t": now, ":a": author}
+    if author == "coach":
+        upd += ", athleteUnread = if_not_exists(athleteUnread, :z) + :one"
+    TABLE.update_item(Key={"PK": f"USER#{athlete_sub}", "SK": session_sk}, UpdateExpression=upd, ExpressionAttributeValues=vals)
+    # notify the other side
+    label = f"{row['sessionTitle']} · {row['scheduledDate']}"
+    data = {"kind": "comment", "sessionSK": session_sk, "athleteSub": athlete_sub}
+    if author == "athlete" and coach_sub:
+        _push_data(coach_sub, f"{row['authorName']} commented", f"{label}: {text[:120]}", data)
+    elif author == "coach":
+        _push_data(athlete_sub, f"{COACH_DISPLAY} replied", f"{label}: {text[:120]}", data)
+    return row
+
+def _comment_thread(athlete_sub, session_sk):
+    r = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{athlete_sub}") &
+                    Key("SK").begins_with(f"CMT#{_session_uuid(session_sk)}#"))
+    out = []
+    for c in r.get("Items", []):
+        out.append({k: c.get(k) for k in ("SK", "author", "authorName", "text", "createdAt", "readByCoachAt", "readByAthleteAt")})
+    return out, r.get("Items", [])
+
+
 def _race_start(plan_id, race_date, chosen=None):
     meta, sessions = load_plan(plan_id)
     if not meta or not sessions: return None, "plan not found"
@@ -629,6 +729,7 @@ def lambda_handler(event, context):
             return _resp(200, {"username": inv["username"], "ok": True})
 
         claims = _claims(event); sub = claims["sub"]
+        _stamp_last_seen(event, sub)  # v58-last-seen
 
         if rk == "POST /subscriptions":
             b = _body(event)
@@ -911,8 +1012,29 @@ def lambda_handler(event, context):
                     s.pop("rawText", None); s.pop("prescriptions", None)
                     s["locked"] = True
             return _resp(200, {"sessions": items, "count": count})
+        if rk == "GET /me/comments":   # v59
+            q = event.get("queryStringParameters") or {}
+            ssk = q.get("sessionSK") or ""
+            if not ssk.startswith("SCHED#"): return _resp(400, {"error": "sessionSK required"})
+            thread, raw = _comment_thread(sub, ssk)
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            for c in raw:   # mark coach messages read by the athlete
+                if c.get("author") == "coach" and not c.get("readByAthleteAt"):
+                    TABLE.update_item(Key={"PK": c["PK"], "SK": c["SK"]}, UpdateExpression="SET readByAthleteAt = :t",
+                                      ExpressionAttributeValues={":t": now})
+            TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": ssk}, UpdateExpression="SET athleteUnread = :z",
+                              ConditionExpression="attribute_exists(SK)", ExpressionAttributeValues={":z": 0})
+            return _resp(200, {"sessionSK": ssk, "comments": thread})
+        if rk == "POST /me/comments":   # v59
+            b = _body(event)
+            ssk = b.get("sessionSK") or ""
+            if not ssk.startswith("SCHED#"): return _resp(400, {"error": "sessionSK required"})
+            row = _comment_add(sub, ssk, "athlete", sub, b.get("text"))
+            if not row: return _resp(404, {"error": "session not found or empty text"})
+            return _resp(200, {"ok": True, "comment": {k: row.get(k) for k in ("SK", "author", "authorName", "text", "createdAt")}})
         if rk == "POST /logs":
             b = _body(event)
+            prev = TABLE.get_item(Key={"PK": f"USER#{sub}", "SK": b["sessionSK"]}, ProjectionExpression="logComment").get("Item") or {}  # v59
             upd, vals = ["logStatus = :s", "loggedAt = :t"], {
                 ":s": b.get("status", "complete"),
                 ":t": datetime.datetime.now(datetime.timezone.utc).isoformat()}
@@ -922,6 +1044,10 @@ def lambda_handler(event, context):
             TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": b["sessionSK"]},
                               UpdateExpression="SET " + ", ".join(upd),
                               ExpressionAttributeValues=vals)
+            c = (b.get("comment") or "").strip()   # v59: the log note is message #0 of the thread
+            if c and c != (prev.get("logComment") or "").strip():
+                try: _comment_add(sub, b["sessionSK"], "athlete", sub, c)
+                except Exception as e: print(f"[v59] log->comment failed: {e}")
             return _resp(200, {"ok": True})
         if rk == "POST /sessions/move":
             b = _body(event)
@@ -949,6 +1075,37 @@ def lambda_handler(event, context):
 
         if rk.startswith("GET /coach") or rk.startswith("POST /coach"):
             if not _is_coach(event): return _resp(403, {"error": "coaches only"})
+        if rk == "GET /coach/comments/inbox":   # v59 — athlete messages the coach hasn't opened, newest first
+            r = TABLE.query(IndexName="GSI1", KeyConditionExpression=Key("GSI1PK").eq(f"CMTINBOX#{sub}"),
+                            ScanIndexForward=False, Limit=100)
+            out = []
+            for c in r.get("Items", []):
+                out.append({"athleteSub": c["PK"].replace("USER#", ""), "authorName": c.get("authorName", ""),
+                            "sessionSK": c.get("sessionSK"), "sessionTitle": c.get("sessionTitle", ""),
+                            "scheduledDate": c.get("scheduledDate", ""), "planTitle": c.get("planTitle", ""),
+                            "text": c.get("text", ""), "createdAt": c.get("createdAt", "")})
+            return _resp(200, {"unread": out, "count": len(out)})
+        if rk == "GET /coach/comments":   # v59 — full thread; opening it clears those messages from the inbox
+            q = event.get("queryStringParameters") or {}
+            a, ssk = q.get("athleteSub") or "", q.get("sessionSK") or ""
+            if not a or not ssk.startswith("SCHED#"): return _resp(400, {"error": "athleteSub and sessionSK required"})
+            thread, raw = _comment_thread(a, ssk)
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            for c in raw:
+                if c.get("author") == "athlete" and not c.get("readByCoachAt"):
+                    TABLE.update_item(Key={"PK": c["PK"], "SK": c["SK"]},
+                        UpdateExpression="SET readByCoachAt = :t REMOVE GSI1PK, GSI1SK", ExpressionAttributeValues={":t": now})
+            sess = TABLE.get_item(Key={"PK": f"USER#{a}", "SK": ssk}).get("Item") or {}
+            return _resp(200, {"athleteSub": a, "sessionSK": ssk, "comments": thread,
+                               "session": {k: sess.get(k) for k in ("title", "coachTitle", "planTitle", "scheduledDate", "logStatus",
+                                           "logResultText", "logComment", "logTimeSeconds", "loggedAt", "rawText")}})
+        if rk == "POST /coach/comments":   # v59
+            b = _body(event)
+            a, ssk = b.get("athleteSub") or "", b.get("sessionSK") or ""
+            if not a or not ssk.startswith("SCHED#"): return _resp(400, {"error": "athleteSub and sessionSK required"})
+            row = _comment_add(a, ssk, "coach", sub, b.get("text"))
+            if not row: return _resp(404, {"error": "session not found or empty text"})
+            return _resp(200, {"ok": True, "comment": {k: row.get(k) for k in ("SK", "author", "authorName", "text", "createdAt")}})
         if rk == "POST /coach/sessions/update":
             b = _body(event)
             a = b["athleteSub"]; sk = b["sessionSK"]
@@ -1217,7 +1374,8 @@ def lambda_handler(event, context):
                         "logTimeSeconds": s.get("logTimeSeconds"),
                         "logResultText": (s.get("logResultText") or "")[:300],
                         "logComment": (s.get("logComment") or "")[:300],
-                        "logPhotoKeys": s.get("logPhotoKeys") or []})
+                        "logPhotoKeys": s.get("logPhotoKeys") or [],
+                        "commentCount": int(s.get("commentCount") or 0), "lastCommentBy": s.get("lastCommentBy")})  # v59
                 lek = r.get("LastEvaluatedKey")
                 if not lek: break
             out.sort(key=lambda x: x["loggedAt"], reverse=True)
@@ -1276,7 +1434,15 @@ def lambda_handler(event, context):
                     "coached": bool(prof.get("GSI1PK")),
                     "provider": prof.get("provider", ""),
                     "activePlans": [e.get("planTitle", "?") for e in enr if e.get("status") == "active"],
-                    "logged": logged, "missed": missed})
+                    "logged": logged, "missed": missed,
+                    # v58-last-seen
+                    "selfSignup": bool(prof.get("selfSignup")),
+                    "firstSeenAt": prof.get("firstSeenAt", ""),
+                    "lastSeenAt": prof.get("lastSeenAt", ""),
+                    "lastAppVersion": prof.get("lastAppVersion", ""),
+                    "lastAppBuild": prof.get("lastAppBuild", ""),
+                    "lastOSVersion": prof.get("lastOSVersion", ""),
+                    "lastDeviceModel": prof.get("lastDeviceModel", "")})
             out.sort(key=lambda x: x["createdAt"], reverse=True)
             return _resp(200, {"athletes": out})
         if rk == "POST /coach/subscriptions/grant":

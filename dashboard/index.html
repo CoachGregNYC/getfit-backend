@@ -37,6 +37,17 @@ body.authed #sidebar{display:flex}
 .wrap{max-width:1280px;margin:20px auto;padding:0 22px}
 
 .card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 1px 4px rgba(27,42,74,.08);margin-bottom:16px}
+.stat{background:var(--surf);border-radius:10px;padding:6px 12px;font-size:13px;color:var(--slate)}
+.stat b{color:var(--navy);font-size:15px;margin-right:4px}
+.bld{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--icet);font-size:12px}
+.bld.stale{background:#FBE9E7;color:#B3261E}
+.seen-hot{color:#2E7D32;font-weight:600}.seen-cold{color:var(--slate)}
+.admhead{background:var(--navy);color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;font-size:13px;font-weight:700;margin-top:6px}
+.admhead .cnt{float:right;font-weight:400;opacity:.85}
+.stx{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.stx.live{background:#E1F5EE;color:#085041}.stx.dev{background:#E6F1FB;color:#0C447C}
+.stx.old{background:var(--surf);color:var(--slate)}.stx.rej{background:#FCEBEB;color:#791F1F}.stx.rev{background:#FFF1D6;color:#7A4B00}
+.mnum{color:var(--slate);font-variant-numeric:tabular-nums}
 #login{max-width:380px;margin:80px auto;text-align:center}
 #login img{width:120px;height:120px;margin-bottom:10px}
 #login h2{margin-bottom:12px}#login input{width:100%;margin-bottom:10px;text-align:left}
@@ -70,6 +81,14 @@ td,th{padding:8px;border-bottom:1px solid var(--icet);text-align:left}
 .code{font-family:monospace;font-size:20px;letter-spacing:3px;background:var(--surf);padding:8px 14px;border-radius:8px}
 .prof{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:13px;margin-top:10px;background:var(--surf);border-radius:10px;padding:12px 16px;max-width:560px}
 .prof b{color:var(--slate);font-weight:600}
+.whoop{margin-top:10px;background:var(--surf);border-radius:10px;padding:12px 16px;max-width:560px;font-size:13px}
+.whoop h4{margin:0 0 6px;font-size:13px;color:var(--slate);display:flex;align-items:center;gap:8px}
+.whoop .line{font-size:15px;margin:2px 0 8px}
+.rec{font-weight:700}.rec.g{color:#2E7D32}.rec.y{color:#B26A00}.rec.r{color:#B3261E}
+.rpill{display:inline-block;min-width:34px;text-align:center;padding:1px 6px;border-radius:999px;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
+.rpill.g{background:#E1F5EE;color:#085041}.rpill.y{background:#FFF1D6;color:#7A4B00}.rpill.r{background:#FCEBEB;color:#791F1F}
+.whoop svg{display:block;width:100%;height:64px}
+.whoop .lg{display:flex;gap:14px;color:var(--slate);font-size:11px;margin-top:4px}
 #libHead th{cursor:pointer;user-select:none;white-space:nowrap}
 .achip{padding:8px 16px;border-radius:20px;background:#fff;border:1px solid var(--ice);cursor:pointer;color:var(--navy);font-size:14px;font-weight:600}
 .achip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
@@ -148,6 +167,11 @@ body.feed-mode .abar{display:flex}
     <div><div class="bt">GET FIT</div><div class="bs">Coach Dashboard</div></div>
   </div>
   <nav id="topnav">
+    <button id="navAdmin" onclick="toggleGroup('adm')">Admin <span class="caret" id="caretAdm">▸</span></button>
+    <div class="sgroup collapsed" id="groupAdm">
+      <button class="sitem" id="siMembers" onclick="showAdmin('members')">Members</button>
+      <button class="sitem" id="siBuilds" onclick="showAdmin('builds')">Builds</button>
+    </div>
     <button id="navCal" class="nav-on" onclick="show('cal');toggleGroup('ath')">Athletes <span class="caret" id="caretAth">▾</span></button>
     <div class="sgroup" id="groupAth"></div>
     <button id="navProg" onclick="show('prog');toggleGroup('pl')">Plans <span class="caret" id="caretPl">▸</span></button>
@@ -156,7 +180,7 @@ body.feed-mode .abar{display:flex}
   <div class="sidefoot">
     <div class="who" id="who"></div>
     <button onclick="signOutDash()">Sign out</button>
-    <div>v4.0.7</div>
+    <div>v4.2.2</div>
   </div>
 </aside>
 <div class="main">
@@ -171,6 +195,32 @@ body.feed-mode .abar{display:flex}
     <div id="lerr" class="err"></div>
   </div>
 
+  <div id="view-admin" style="display:none">
+    <div class="card" id="admMembers">
+      <div class="toolbar">
+        <div><h3>Members</h3><div class="muted" style="font-size:13px">All registered accounts. Tracks growth and who is signing up on their own.</div></div>
+        <button class="ghost" onclick="loadAdmin(true)">↻ Refresh</button>
+      </div>
+      <div id="admStats" class="row" style="gap:8px;margin:4px 0 10px;flex-wrap:wrap"></div>
+      <div style="overflow-x:auto"><table><thead><tr>
+        <th>#</th><th>Name</th><th>Username</th><th>Email</th><th>Joined</th><th>Type</th>
+        <th>Last active</th><th>Version</th><th>Device</th><th>Plans</th><th>Logged</th><th>Missed</th><th></th>
+      </tr></thead><tbody id="admMembersBody"></tbody></table></div>
+      <div id="admMembersMsg" class="muted"></div>
+    </div>
+    <div class="card" id="admBuilds">
+      <div class="toolbar">
+        <div><h3>Builds</h3><div class="muted" style="font-size:13px">Who is running which build. Version comes from the X-App-Version header every GET FIT API call sends since 1.0 (19)+headers; members who haven't opened a headers build show as “not reported”.</div></div>
+        <button class="ghost" onclick="loadAdmin(true)">↻ Refresh</button>
+      </div>
+      <div id="admBuildStats" class="muted" style="margin:4px 0 10px"></div>
+      <div class="admhead">Release ledger <span style="float:right;font-weight:400;opacity:.8">App Store version ↔ build · edit RELEASES in index.html to add one</span></div>
+      <div style="overflow-x:auto"><table><thead><tr>
+        <th>App Store</th><th>Build</th><th>Released</th><th>Status</th><th>What</th>
+      </tr></thead><tbody id="admLedgerBody"></tbody></table></div>
+      <div id="admBuildGroups" style="margin-top:14px"></div>
+    </div>
+  </div>
   <div id="view-cal" style="display:none">
     <div class="card">
       <div class="row">
@@ -185,6 +235,7 @@ body.feed-mode .abar{display:flex}
         <span class="err" id="aerr"></span>
       </div>
       <div id="profCard" style="display:none"></div>
+      <div id="whoopCard" style="display:none"></div>
       <div id="archRow" class="muted" style="margin-top:6px"></div>
     </div>
     <div class="card">
@@ -249,7 +300,7 @@ body.feed-mode .abar{display:flex}
     </div>
     <div class="card">
       <div class="toolbar">
-        <h3>Recent Activity <span class="muted" style="font-size:13px;font-weight:400">(all athletes · last 14 days)</span></h3>
+        <h3>Recent Activity <span class="muted" id="feedScope" style="font-size:13px;font-weight:400">(all athletes · last 14 days)</span></h3>
         <button class="ghost" onclick="loadFeed()">Refresh</button>
       </div>
       <div id="feedBody"></div>
@@ -260,8 +311,10 @@ body.feed-mode .abar{display:flex}
         <h3>All Athletes <span class="muted" style="font-size:13px;font-weight:400">(admin — includes solo signups)</span></h3>
         <button class="ghost" onclick="loadAllAthletes()">Refresh</button>
       </div>
+      <div id="allStats" class="row" style="gap:8px;margin:4px 0 10px;flex-wrap:wrap"></div>
       <div style="overflow-x:auto"><table><thead><tr>
         <th>Name</th><th>Username</th><th>Email</th><th>Signed up</th><th>Type</th>
+        <th>Last seen</th><th>Build</th><th>Device</th>
         <th>Active plans</th><th>Logged</th><th>Missed</th><th></th>
       </tr></thead><tbody id="allBody"></tbody></table></div>
       <div id="allmsg" class="muted"></div>
@@ -356,8 +409,11 @@ async function signIn(){
 function show(v){
   document.getElementById("view-cal").style.display = v==="cal"?"block":"none";
   document.getElementById("view-prog").style.display = v==="prog"?"block":"none";
+  document.getElementById("view-admin").style.display = v==="admin"?"block":"none";
   navCal.classList.toggle("nav-on",v==="cal");
   navProg.classList.toggle("nav-on",v==="prog");
+  navAdmin.classList.toggle("nav-on",v==="admin");
+  if(v!=="admin"){siMembers.classList.remove("on");siBuilds.classList.remove("on");}
   if(v==="prog")renderLib();
 }
 async function loadPlans(){
@@ -503,12 +559,25 @@ async function doDeleteAthlete(dsub,nm){
     await loadAthletes(); loadAllAthletes(); renderChips(); athleteChanged();
   } else dmsg.textContent=d.error||"delete failed";
 }
+let FEEDRS=[];
 async function loadFeed(){
   feedmsg.textContent="Loading…"; feedBody.innerHTML="";
   const d=await api("/coach/feed");
   if(d.error){feedmsg.textContent=d.error;return}
-  const rs=d.results||[];
-  feedmsg.textContent=rs.length?"":"No logged sessions in the last 14 days — this fills up as athletes train.";
+  FEEDRS=d.results||[];
+  renderFeed();
+}
+// v4.0.9: feed follows the selected athlete chip. "Me (coach)" = everyone.
+function renderFeed(){
+  const sel=(typeof athlete!=="undefined"&&athlete.value&&athlete.value!==MYSUB)?athlete.value:null;
+  const rs=sel?FEEDRS.filter(s=>s.sub===sel):FEEDRS;
+  const fs=document.getElementById("feedScope");
+  if(fs){
+    if(sel){const nm=names[sel]||(PROFS[sel]||{}).name||"this athlete";
+      fs.innerHTML=`(${esc(nm)} · last 14 days · <a href="#" onclick='selectAthlete(MYSUB);return false'>show all</a>)`;}
+    else fs.textContent="(all athletes · last 14 days)";
+  }
+  feedmsg.textContent=rs.length?"":(sel?"No logged sessions from this athlete in the last 14 days.":"No logged sessions in the last 14 days — this fills up as athletes train.");
   feedBody.innerHTML=rs.map(s=>{
     const nm=names[s.sub]||(PROFS[s.sub]||{}).name||s.sub.slice(0,8);
     const st=s.logStatus==="complete"?'<b style="color:#16A34A">✓</b>':'<b style="color:#DC2626">✗</b>';
@@ -529,14 +598,40 @@ async function loadAllAthletes(){
   if(d.error){allmsg.textContent=d.error;return}
   const a=d.athletes||[];
   allmsg.textContent=a.length?"":"No athletes yet.";
+  await loadWhoopSummary();   // v4.2.0
+  // v4.0.8 member intel: last-seen / build / device from athleteApi v58
+  const now=Date.now(), DAY=864e5;
+  const ago=iso=>{if(!iso)return null;const ms=now-Date.parse(iso);if(isNaN(ms))return null;
+    const d=Math.floor(ms/DAY);return d<1?(Math.floor(ms/36e5)<1?"just now":Math.floor(ms/36e5)+"h ago"):d===1?"yesterday":d+"d ago";};
+  const seenCls=iso=>{const ms=now-Date.parse(iso||"");return ms<7*DAY?"seen-hot":"seen-cold";};
+  const builds=a.map(x=>parseInt(x.lastAppBuild)).filter(n=>!isNaN(n));
+  const latest=builds.length?Math.max(...builds):null;
+  const active7=a.filter(x=>x.lastSeenAt&&now-Date.parse(x.lastSeenAt)<7*DAY).length;
+  const active30=a.filter(x=>x.lastSeenAt&&now-Date.parse(x.lastSeenAt)<30*DAY).length;
+  const selfN=a.filter(x=>x.selfSignup).length;
+  const never=a.filter(x=>!x.lastSeenAt).length;
+  const byBuild={};a.forEach(x=>{if(x.lastAppBuild)byBuild[x.lastAppBuild]=(byBuild[x.lastAppBuild]||0)+1;});
+  document.getElementById("allStats").innerHTML=
+    `<span class="stat"><b>${a.length}</b>accounts</span>`+
+    `<span class="stat"><b>${selfN}</b>self-signups</span>`+
+    `<span class="stat"><b>${active7}</b>active 7d</span>`+
+    `<span class="stat"><b>${active30}</b>active 30d</span>`+
+    `<span class="stat"><b>${never}</b>not seen since tracking began</span>`+
+    (Object.keys(byBuild).length?`<span class="stat">builds: ${Object.keys(byBuild).sort((p,q)=>q-p).map(b=>`<span class="bld${latest&&parseInt(b)<latest?" stale":""}">${esc(b)} ×${byBuild[b]}</span>`).join(" ")}</span>`:
+     `<span class="stat">build info arrives with iOS build 20+</span>`);
+  a.sort((p,q)=>(q.lastSeenAt||"").localeCompare(p.lastSeenAt||"")||(q.createdAt||"").localeCompare(p.createdAt||""));
   allBody.innerHTML=a.map(x=>{
     PROFS[x.sub]=PROFS[x.sub]||{name:x.name,username:x.username,email:x.email};
+    const b=parseInt(x.lastAppBuild);
+    const bcell=x.lastAppBuild?`<span class="bld${latest&&b<latest?" stale":""}" title="${esc(x.lastOSVersion||"")}">${esc(x.lastAppVersion||"")} (${esc(x.lastAppBuild)})</span>`:"—";
+    const scell=x.lastSeenAt?`<span class="${seenCls(x.lastSeenAt)}" title="${esc(x.lastSeenAt)}${x.firstSeenAt?" · first "+esc(x.firstSeenAt.slice(0,10)):""}">${ago(x.lastSeenAt)}</span>`:`<span class="muted">—</span>`;
     return `<tr>
-    <td>${esc(x.name)}${x.sub===MYSUB?' <span class="muted">(you)</span>':''}</td>
+    <td>${esc(x.name)}${x.sub===MYSUB?' <span class="muted">(you)</span>':''}${_rp(WHOOPSUM[x.sub])}</td>
     <td title="${esc(x.username)}">${x.username&&x.username.startsWith("apple_")?'<span class="muted"> Apple ID</span>':esc(x.username)}</td>
     <td>${x.email?`<a href="mailto:${esc(x.email)}">${esc(x.email)}</a>`:"—"}</td>
     <td>${esc((x.createdAt||"").slice(0,10))}</td>
-    <td>${x.coached?"Coached":"<b>Solo</b>"}${x.provider==="apple"?" ·  Apple":""}${x.enabled?"":" · disabled"}</td>
+    <td>${x.coached?"Coached":"<b>Solo</b>"}${x.selfSignup?" · self":""}${x.provider==="apple"?" ·  Apple":""}${x.enabled?"":" · disabled"}</td>
+    <td>${scell}</td><td>${bcell}</td><td class="muted">${esc(x.lastDeviceModel||"")}</td>
     <td>${(x.activePlans||[]).map(esc).join(", ")||"—"}</td>
     <td>${x.logged}</td><td>${x.missed?`<b style="color:#B3261E">${x.missed}</b>`:0}</td>
     <td>${x.sub===MYSUB?"":`<button class="ghost" onclick='adminView("${x.sub}","${esc(x.name)}")'>View</button>`}</td>
@@ -556,6 +651,51 @@ async function loadInvites(){
   INVITES=d.invites||[];
   renderMiniProfile();
 }
+/* ---- v4.2.0 WHOOP readiness (athlete opt-in via shares.coach) ---- */
+let WHOOPSUM={};   // sub -> latest shared day (from /whoop/coach/summary)
+const recBand=r=>r>=67?"g":r>=34?"y":"r";
+const _rp=d=>d&&d.recovery!=null?`<span class="rpill ${recBand(+d.recovery)}" title="WHOOP recovery ${d.date}">${Math.round(+d.recovery)}%</span>`:"";
+async function loadWhoopSummary(){
+  try{const d=await api("/whoop/coach/summary"); WHOOPSUM={};
+    (d.athletes||[]).forEach(a=>{WHOOPSUM[a.sub]=(a.days||[])[0]||null;});
+  }catch(e){}
+}
+function whoopLine(d){
+  const parts=[];
+  if(d.recovery!=null) parts.push(`<span class="rec ${recBand(+d.recovery)}">Recovery ${Math.round(+d.recovery)}%</span>`);
+  if(d.hrv!=null) parts.push(`HRV ${Math.round(+d.hrv)}`);
+  if(d.rhr!=null) parts.push(`RHR ${Math.round(+d.rhr)}`);
+  if(d.sleepHours!=null) parts.push(`Sleep ${(+d.sleepHours).toFixed(1)}h${d.sleepPerf!=null?` (${Math.round(+d.sleepPerf)}%)`:""}`);
+  if(d.strain!=null) parts.push(`Strain ${(+d.strain).toFixed(1)}`);
+  return parts.join(" · ");
+}
+function whoopTrend(days){  // oldest -> newest, recovery bars + sleep line
+  const ds=[...days].reverse(); if(!ds.length) return "";
+  const W=520,H=64,n=ds.length,bw=Math.max(6,Math.floor(W/n)-4);
+  const col={g:"#2E7D32",y:"#F2A900",r:"#B3261E"};
+  let out=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  ds.forEach((d,i)=>{const x=i*(W/n)+2;
+    if(d.recovery!=null){const h=Math.max(2,(+d.recovery/100)*(H-14));
+      out+=`<rect x="${x}" y="${H-14-h}" width="${bw}" height="${h}" rx="2" fill="${col[recBand(+d.recovery)]}" opacity=".85"><title>${d.date}: recovery ${Math.round(+d.recovery)}%${d.sleepHours!=null?` · sleep ${(+d.sleepHours).toFixed(1)}h`:""}${d.strain!=null?` · strain ${(+d.strain).toFixed(1)}`:""}</title></rect>`;}
+    out+=`<text x="${x+bw/2}" y="${H-2}" font-size="9" text-anchor="middle" fill="#6b7a90">${d.date.slice(5)}</text>`;});
+  const pts=ds.map((d,i)=>d.sleepHours!=null?`${i*(W/n)+2+bw/2},${H-14-Math.min(1,+d.sleepHours/10)*(H-14)}`:null).filter(Boolean);
+  if(pts.length>1) out+=`<polyline points="${pts.join(" ")}" fill="none" stroke="#1B2A4A" stroke-width="1.5" stroke-dasharray="3 2"/>`;
+  return out+"</svg>";
+}
+async function loadWhoopCard(sub){
+  const c=document.getElementById("whoopCard"); c.style.display="none"; c.innerHTML="";
+  if(!sub||sub===MYSUB) return;
+  let d; try{ d=await api(`/whoop/coach/${sub}?days=14`); }catch(e){ return; }
+  if(!d||d.error) return;
+  if(!d.shared){ if(d.connected){ c.className="whoop"; c.style.display="block";
+      c.innerHTML=`<h4>WHOOP</h4><span class="muted">Connected, but not shared with you. The athlete can turn on “Share with my coach” in Profile → WHOOP.</span>`; } return; }
+  const days=d.days||[]; const t=days[0];
+  c.className="whoop"; c.style.display="block";
+  c.innerHTML=`<h4>WHOOP <span class="muted" style="font-weight:400">· shared ${d.coachShareAt?new Date(d.coachShareAt*1000).toLocaleDateString():""}</span></h4>`+
+    (t?`<div class="line">${whoopLine(t)} <span class="muted" style="font-size:12px">${esc(t.date)}</span></div>`:`<div class="muted">No days yet.</div>`)+
+    whoopTrend(days)+`<div class="lg"><span>■ recovery (WHOOP bands)</span><span>┄ sleep hours (0–10h)</span></div>`;
+}
+
 function renderMiniProfile(){
   const v=athlete.value;
   if(!v||v===MYSUB){profCard.style.display="none";return}
@@ -583,7 +723,9 @@ function athleteChanged(){
   delBtn.style.display=mine?"none":"inline-block";
   reinvBtn.style.display=mine?"none":"inline-block";
   renderMiniProfile();
+  loadWhoopCard(athlete.value);
   loadCal(); loadActivePlans(); loadRaces(); loadBench(); loadResults();
+  renderFeed();
 }
 async function loadActivePlans(){
   apmsg.textContent="Loading…"; apBody.innerHTML="";
@@ -1090,11 +1232,94 @@ window.addEventListener("popstate",()=>{
 </script>
 <script>
 /* ---- v4.0 sidebar navigator ---- */
-const GROUPS={ath:true,pl:false};
+const GROUPS={ath:true,pl:false,adm:false};
+const _GEL={ath:["groupAth","caretAth"],pl:["groupPl","caretPl"],adm:["groupAdm","caretAdm"]};
 function toggleGroup(g,forceOpen){
   GROUPS[g]=forceOpen===true?true:!GROUPS[g];
-  document.getElementById(g==="ath"?"groupAth":"groupPl").classList.toggle("collapsed",!GROUPS[g]);
-  document.getElementById(g==="ath"?"caretAth":"caretPl").textContent=GROUPS[g]?"▾":"▸";
+  document.getElementById(_GEL[g][0]).classList.toggle("collapsed",!GROUPS[g]);
+  document.getElementById(_GEL[g][1]).textContent=GROUPS[g]?"▾":"▸";
+}
+
+/* ---- v4.1.0 Admin: Members + Builds ---- */
+// Release ledger — one line per build. Keep newest first. status: dev | live | old | rej
+const RELEASES=[
+  {store:"1.1",build:"1.1 (20)",released:"2026-09-21",status:"live",what:"WHOOP integration + coach sharing; share-to-install links; Strava matcher + disconnect fixes; app/device headers; plan rename; hardening"},
+  {store:"1.0",build:"1.0 (19)",released:"2026-09-13",status:"old",what:"App Store launch (free). Terms + Privacy links, free-launch gating"},
+  {store:"1.0",build:"1.0 (18)",released:"",status:"rej",what:"Rejected: pricing in screenshots, IAP not submitted, beta language, missing Terms"},
+  {store:"—",build:"1.0 (15)",released:"2026-09-02",status:"old",what:"Last TestFlight-only build"},
+];
+let ADMINROWS=null, ADMINTAB="members";
+function showAdmin(tab){
+  ADMINTAB=tab; show("admin"); toggleGroup("adm",true);
+  siMembers.classList.toggle("on",tab==="members"); siBuilds.classList.toggle("on",tab==="builds");
+  admMembers.style.display=tab==="members"?"block":"none";
+  admBuilds.style.display=tab==="builds"?"block":"none";
+  loadAdmin(false);
+  window.scrollTo({top:0});
+}
+async function loadAdmin(force){
+  if(ADMINROWS&&!force){renderAdmin();return}
+  admMembersMsg.textContent="Loading…";
+  const d=await api("/coach/athletes/all");
+  if(d.error){admMembersMsg.textContent=d.error;return}
+  ADMINROWS=(d.athletes||[]);
+  ADMINROWS.forEach(x=>{PROFS[x.sub]=PROFS[x.sub]||{name:x.name,username:x.username,email:x.email};});
+  renderAdmin();
+}
+const _ago=iso=>{if(!iso)return "—";const ms=Date.now()-Date.parse(iso);if(isNaN(ms))return "—";
+  const h=Math.floor(ms/36e5),d=Math.floor(ms/864e5);return h<1?"just now":h<24?h+" h ago":d+" d ago";};
+const _hot=iso=>iso&&Date.now()-Date.parse(iso)<7*864e5;
+function renderAdmin(){
+  const a=[...ADMINROWS];
+  // member numbers = join order (oldest = 001)
+  const byJoin=[...a].sort((p,q)=>(p.createdAt||"").localeCompare(q.createdAt||""));
+  const num={}; byJoin.forEach((x,i)=>num[x.sub]=String(i+1).padStart(3,"0"));
+  const isMe=x=>x.sub===MYSUB;
+  const humans=a.filter(x=>!isMe(x));
+  const act7=humans.filter(x=>_hot(x.lastSeenAt)).length;
+  const act30=humans.filter(x=>x.lastSeenAt&&Date.now()-Date.parse(x.lastSeenAt)<30*864e5).length;
+  const selfN=a.filter(x=>x.selfSignup).length;
+  const wk=a.filter(x=>x.createdAt&&Date.now()-Date.parse(x.createdAt)<7*864e5).length;
+  admStats.innerHTML=`<span class="stat"><b>${a.length}</b>members</span><span class="stat"><b>${wk}</b>joined this week</span>`+
+    `<span class="stat"><b>${selfN}</b>self-signups</span><span class="stat"><b>${act7}</b>active 7d</span><span class="stat"><b>${act30}</b>active 30d</span>`+
+    `<span class="stat muted">coach account excluded from active counts</span>`;
+  // Members table — newest joined first (like SPOT)
+  a.sort((p,q)=>(q.createdAt||"").localeCompare(p.createdAt||""));
+  admMembersMsg.textContent=a.length?"":"No members yet.";
+  admMembersBody.innerHTML=a.map(x=>`<tr>
+    <td class="mnum">${num[x.sub]}</td>
+    <td>${esc(x.name)}${isMe(x)?' <span class="muted">(you)</span>':''}</td>
+    <td>${x.username&&x.username.startsWith("apple_")?'<span class="muted"> Apple ID</span>':esc(x.username||"")}</td>
+    <td>${x.email?`<a href="mailto:${esc(x.email)}">${esc(x.email)}</a>`:"—"}</td>
+    <td>${esc((x.createdAt||"").slice(0,10))}</td>
+    <td>${x.coached?"Coached":"Solo"}${x.selfSignup?" · self":""}${x.enabled?"":" · disabled"}</td>
+    <td class="${_hot(x.lastSeenAt)?"seen-hot":"seen-cold"}" title="${esc(x.lastSeenAt||"")}">${_ago(x.lastSeenAt)}</td>
+    <td>${x.lastAppBuild?`<span class="bld">${esc(x.lastAppVersion||"")} (${esc(x.lastAppBuild)})</span>`:'<span class="muted">not reported</span>'}</td>
+    <td class="muted">${esc(x.lastDeviceModel||"")}${x.lastOSVersion?` · ${esc(x.lastOSVersion)}`:""}</td>
+    <td>${(x.activePlans||[]).map(esc).join(", ")||"—"}</td>
+    <td>${x.logged||0}</td><td>${x.missed?`<b style="color:#B3261E">${x.missed}</b>`:0}</td>
+    <td>${isMe(x)?"":`<button class="ghost" onclick='adminView("${x.sub}","${esc(x.name)}")'>View</button>`}</td>
+  </tr>`).join("");
+  // Builds
+  const builds=a.map(x=>parseInt(x.lastAppBuild)).filter(n=>!isNaN(n));
+  const latest=builds.length?Math.max(...builds):null;
+  const onLatest=latest?a.filter(x=>parseInt(x.lastAppBuild)===latest).length:0;
+  const none=a.filter(x=>!x.lastAppBuild).length;
+  admBuildStats.innerHTML=`${a.length} members${latest?` · newest reported build <b>${latest}</b> · ${onLatest} on it`:""} · ${none} not reported`;
+  const stx={live:'<span class="stx live">live</span>',dev:'<span class="stx dev">in development</span>',rev:'<span class="stx rev">in review</span>',old:'<span class="stx old">superseded</span>',rej:'<span class="stx rej">rejected</span>'};
+  admLedgerBody.innerHTML=RELEASES.map(r=>`<tr><td>${esc(r.store)}</td><td>${esc(r.build)}</td><td>${r.released||"—"}</td><td>${stx[r.status]||""}</td><td>${esc(r.what)}</td></tr>`).join("");
+  const groups={}; a.forEach(x=>{const k=x.lastAppBuild?`${x.lastAppVersion||"?"} (${x.lastAppBuild})`:"not reported";(groups[k]=groups[k]||[]).push(x);});
+  const keys=Object.keys(groups).sort((p,q)=>{if(p==="not reported")return 1;if(q==="not reported")return -1;return (parseInt(q.match(/\((\d+)\)/)?.[1]||0))-(parseInt(p.match(/\((\d+)\)/)?.[1]||0));});
+  admBuildGroups.innerHTML=keys.map(k=>{
+    const rel=RELEASES.find(r=>r.build===k);
+    const rows=groups[k].sort((p,q)=>(q.lastSeenAt||"").localeCompare(p.lastSeenAt||""));
+    return `<div class="admhead">GET FIT ${esc(k)}${rel?` — App Store ${esc(rel.store)} ${rel.status==="live"?"(live)":rel.status==="dev"?"(in development)":rel.status==="rev"?"(in review)":""}`:""}<span class="cnt">${rows.length} member${rows.length===1?"":"s"}</span></div>
+    <table><thead><tr><th>#</th><th>Name</th><th>Username</th><th>Device</th><th>Last active</th><th>Joined</th></tr></thead><tbody>${
+      rows.map(x=>`<tr><td class="mnum">${num[x.sub]}</td><td>${esc(x.name)}${isMe(x)?' <span class="muted">(you)</span>':''}</td>
+        <td>${x.username&&x.username.startsWith("apple_")?'<span class="muted"> Apple ID</span>':esc(x.username||"")}</td>
+        <td class="muted">${esc(x.lastDeviceModel||"")}${x.lastOSVersion?` · ${esc(x.lastOSVersion)}`:""}</td>
+        <td class="${_hot(x.lastSeenAt)?"seen-hot":"seen-cold"}">${_ago(x.lastSeenAt)}</td><td>${esc((x.createdAt||"").slice(0,10))}</td></tr>`).join("")
+    }</tbody></table><div style="height:14px"></div>`;}).join("");
 }
 function renderSideAth(){
   const el=document.getElementById("groupAth"); if(!el||typeof athlete==="undefined")return;

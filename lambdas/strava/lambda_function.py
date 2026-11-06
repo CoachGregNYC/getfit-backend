@@ -50,14 +50,42 @@ def _fresh_token(rec):
             ":r": tok["refresh_token"], ":e": int(tok["expires_at"])})
     return tok["access_token"]
 
+# v4 (2026-09-19): account selection + smarter matching.
+#  - One Strava athlete may be linked to several GET FIT accounts (e.g. a coached
+#    account and a stray Apple-ID self-signup). Prefer the account that actually
+#    has a schedule around the activity date instead of scan order.
+#  - 2+ same-type sessions on the day (athlete on several plans): drop "My Workouts"
+#    if a plan session exists, then pick the first by SK. Never drop the activity.
+#  - 0 sessions on the day: look at the day before/after (late uploads, timezones);
+#    use it only if exactly one candidate turns up there.
+#  - lastUnmatched now records a reason; matches record lastMatched.
+def _cands(sub, date, stype):
+    q = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
+                    Key("SK").begins_with(f"SCHED#{date}"))
+    return [s for s in q.get("Items", [])
+            if s.get("sessionType") == stype
+            and s.get("logStatus") not in ("complete", "missed")]
+
+def _shift(date, days):
+    import datetime as _d
+    return (_d.date.fromisoformat(date) + _d.timedelta(days=days)).isoformat()
+
+def _has_schedule_near(sub, date):
+    for d in (date, _shift(date, -1), _shift(date, 1)):
+        q = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
+                        Key("SK").begins_with(f"SCHED#{d}"), Limit=1)
+        if q.get("Items"): return True
+    return False
+
 def _handle_activity(owner_id, activity_id):
     r = TABLE.scan(FilterExpression=Attr("itemType").eq("STRAVA") &
                    Attr("stravaAthleteId").eq(int(owner_id)))
     recs = r.get("Items", [])
     if not recs:
         print(f"no connected user for strava athlete {owner_id}"); return
-    rec = recs[0]; sub = rec["PK"].replace("USER#", "")
-    token = _fresh_token(rec)
+    # need the activity date before we can pick an account; use the first rec's token
+    token = _fresh_token(recs[0])
+    if not token and len(recs) > 1: token = _fresh_token(recs[1])
     if not token: return
     act = _get(f"https://www.strava.com/api/v3/activities/{activity_id}", token)
     stype = SPORT.get(act.get("type") or act.get("sport_type", ""))
@@ -65,18 +93,32 @@ def _handle_activity(owner_id, activity_id):
         print(f"unmapped sport {act.get('type')}"); return
     date = (act.get("start_date_local") or "")[:10]
     if not date: return
-    q = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
-                    Key("SK").begins_with(f"SCHED#{date}"))
-    cands = [s for s in q.get("Items", [])
-             if s.get("sessionType") == stype
-             and s.get("logStatus") not in ("complete", "missed")]
+    # pick the account: the one with a schedule near this date, else scan order
+    rec = recs[0]
+    if len(recs) > 1:
+        subs = [x["PK"].replace("USER#", "") for x in recs]
+        with_sched = [x for x in recs if _has_schedule_near(x["PK"].replace("USER#", ""), date)]
+        if with_sched: rec = with_sched[0]
+        print(f"strava athlete {owner_id} linked to {len(recs)} accounts {subs}; using {rec['PK']}")
+    sub = rec["PK"].replace("USER#", "")
+    cands = _cands(sub, date, stype); reason = ""
+    if len(cands) == 0:
+        near = _cands(sub, _shift(date, -1), stype) + _cands(sub, _shift(date, 1), stype)
+        if len(near) == 1: cands = near; reason = "matched adjacent day"
+        else: reason = f"no {stype} scheduled on {date} (adjacent days: {len(near)})"
+    elif len(cands) > 1:
+        plan = [c for c in cands if (c.get("planTitle") or "") != "My Workouts"]
+        pool = plan or cands
+        pool.sort(key=lambda c: c["SK"])
+        reason = f"chose 1 of {len(cands)} same-day {stype} sessions"
+        cands = [pool[0]]
     if len(cands) != 1:
-        print(f"ambiguous match ({len(cands)}) for {stype} on {date} sub {sub}")
+        print(f"unmatched: {reason} sub {sub}")
         TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": "STRAVA"},
             UpdateExpression="SET lastUnmatched=:u",
             ExpressionAttributeValues={":u": {"activityId": int(activity_id),
-                "date": date, "type": stype, "candidates": len(cands),
-                "at": int(time.time())}})
+                "date": date, "type": stype, "candidates": 0, "reason": reason,
+                "name": (act.get("name") or "")[:80], "at": int(time.time())}})
         return
     laps = []
     try:
@@ -96,7 +138,12 @@ def _handle_activity(owner_id, activity_id):
     TABLE.update_item(Key={"PK": cands[0]["PK"], "SK": cands[0]["SK"]},
         UpdateExpression="SET stravaSuggestion=:s, stravaActivityId=:a",
         ExpressionAttributeValues={":s": sug, ":a": int(activity_id)})
-    print(f"suggestion attached: {cands[0]['SK']} <- activity {activity_id} ({len(sug['laps'])} laps)")
+    TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": "STRAVA"},
+        UpdateExpression="SET lastMatched=:m",
+        ExpressionAttributeValues={":m": {"activityId": int(activity_id), "date": date,
+            "type": stype, "sk": cands[0]["SK"], "reason": reason or "exact",
+            "at": int(time.time())}})
+    print(f"suggestion attached: {cands[0]['SK']} <- activity {activity_id} ({len(sug['laps'])} laps) {reason}")
 
 def lambda_handler(event, context):
     rk = event.get("routeKey", "")
