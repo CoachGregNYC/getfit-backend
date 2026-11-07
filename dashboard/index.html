@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="GET FIT Coach"><meta name="theme-color" content="#1C2B4A">
+<link rel="apple-touch-icon" href="coaching-icon.png">
 <title>GET FIT — Coach Dashboard</title>
 <style>
 :root{--navy:#1B2A4A;--mid:#22345A;--steel:#3E6391;--steel-h:#35547C;--ice:#AEC3DC;
@@ -42,6 +44,37 @@ body.authed #sidebar{display:flex}
 .bld{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--icet);font-size:12px}
 .bld.stale{background:#FBE9E7;color:#B3261E}
 .seen-hot{color:#2E7D32;font-weight:600}.seen-cold{color:var(--slate)}
+/* v5.0 athlete tiles + per-session threads */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px}
+.tile{background:#fff;border:1px solid #DCE4EF;border-radius:14px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:box-shadow .15s}
+.tile:hover{box-shadow:0 4px 16px rgba(28,43,74,.12)}
+.tile .face{aspect-ratio:1/1;width:100%;display:flex;align-items:flex-end;padding:10px;box-sizing:border-box;font-size:40px;font-weight:800;color:#fff;position:relative;background-size:cover;background-position:center}
+.tile .wait{position:absolute;top:10px;right:10px;background:#DC2626;color:#fff;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+.tile .nm{padding:10px 12px 2px;font-weight:700;font-size:15px;color:var(--navy)}
+.tile .pl{padding:0 12px;font-size:12px;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .st{padding:8px 12px 12px;display:flex;gap:6px;align-items:center;font-size:11px;color:var(--slate)}
+.tile .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.tile.me .face{background:var(--navy)}
+.fchip{font-size:12px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid #DCE4EF;background:#fff;color:var(--navy);cursor:pointer}
+.fchip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sess .cm{margin-left:4px;font-size:11px}.sess .cm.wait{color:#fff;background:#DC2626;border-radius:999px;padding:0 5px}
+.sthread{background:var(--surf);border-radius:10px;padding:10px;margin:8px 0}
+.sthread .bub{max-width:90%;padding:8px 11px;border-radius:12px;margin:5px 0;font-size:13px;line-height:1.4;white-space:pre-wrap}
+.sthread .bub.ath{background:#fff;margin-right:auto;border-bottom-left-radius:4px}
+.sthread .bub.coach{background:var(--navy);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
+.sthread .by{font-size:11px;opacity:.7;margin-bottom:2px}
+.nico{width:18px;height:18px;margin-right:10px;flex-shrink:0;vertical-align:-4px}
+#topnav>button{display:flex;align-items:center}
+@media (max-width:640px){.nico{margin-right:0}.nlbl{display:none}#topnav>button{padding:8px 12px}}
+.ibadge{display:inline-block;min-width:18px;padding:1px 6px;border-radius:999px;background:#DC2626;color:#fff;font-size:11px;font-weight:700;margin-left:6px;vertical-align:middle}
+.ibx{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid #E6ECF4;cursor:pointer}
+.ibx:hover{background:var(--surf)}.ibx .who{font-weight:600;color:var(--navy);white-space:nowrap}
+.ibx .what{flex:1}.ibx .when{color:var(--slate);font-size:12px;white-space:nowrap}
+.bub{max-width:78%;padding:10px 14px;border-radius:14px;margin:6px 0;line-height:1.4;white-space:pre-wrap}
+.bub.ath{background:var(--surf);margin-right:auto;border-bottom-left-radius:4px}
+.bub.coach{background:var(--navy);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
+.bub .by{font-size:11px;opacity:.75;margin-bottom:2px}
+.cbub{display:inline-block;margin-left:8px;font-size:12px;color:var(--steel);cursor:pointer}
 .admhead{background:var(--navy);color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;font-size:13px;font-weight:700;margin-top:6px}
 .admhead .cnt{float:right;font-weight:400;opacity:.85}
 .stx{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
@@ -113,6 +146,9 @@ td,th{padding:8px;border-bottom:1px solid var(--icet);text-align:left}
 .abar .aname{font-size:17px;font-weight:800}
 .abar .asub{opacity:.75;font-size:13px}
 body.athlete-mode .abar{display:flex}
+body.authed.athlete-mode .abar{margin-left:224px}   /* v5.0.3: clear the fixed sidebar so the back button shows */
+body.athlete-mode #athleteChips,body.athlete-mode #addAthBtn,body.athlete-mode #acount,body.athlete-mode #view-cal .card:first-child .row>label{display:none}   /* v5.0.3: one athlete at a time — no switcher pills */
+@media(max-width:900px){body.authed.athlete-mode .abar{margin-left:0}}
 
 .thumbs{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .thumb{width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid #ddd;
@@ -124,7 +160,28 @@ body.feed-mode .thumb{width:96px;height:96px}
 body.feed-mode .card{display:none}
 body.feed-mode .card.feedcard{display:block}
 body.feed-mode .abar{display:flex}
+/* v5.0.1 phone pass — home-screen web app */
 @media (max-width:640px){
+  body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+  body.authed #sidebar{flex-wrap:wrap;padding:6px 10px;gap:6px;position:sticky;top:0;z-index:40;align-items:center}
+  #sidebar .brand{display:flex;align-items:center;gap:8px;width:auto;margin:0}
+  #sidebar .brand img{width:28px;height:28px}#sidebar .brand .bt{font-size:14px}#sidebar .brand .bs{display:none}
+  #sidebar .sgroup,#sidebar .caret{display:none!important}
+  #topnav{display:flex;gap:4px;flex-wrap:nowrap;flex:1;justify-content:center;margin:0}
+  #topnav button{width:auto;padding:7px 10px;font-size:13px;border-radius:8px;margin:0;white-space:nowrap}
+  #sidebar .sidefoot{display:flex;flex-direction:row;gap:8px;align-items:center;margin:0;padding:0;font-size:12px}
+  #sidebar .sidefoot .who,#sidebar .sidefoot div:last-child{display:none}
+  #sidebar .sidefoot button{width:auto;padding:6px 10px;font-size:12px;margin:0}
+  .card{padding:12px;border-radius:12px}
+  .tiles{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+  .tile .face{font-size:30px}.tile .nm{font-size:14px}
+  #athSearch{width:100%!important}
+  #cal{gap:3px}.day{min-height:64px;padding:3px}.dnum{font-size:11px}.dhead{font-size:10px}
+  .sess{font-size:9px;padding:2px 3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dayadd{display:none}
+  .abar{padding:8px 10px}.abar .aname{font-size:15px}.abar .asub{display:none}
+  #panel textarea{min-height:90px}
+  .ibx{flex-wrap:wrap}.ibx .when{width:100%;text-align:right}
   body.feed-mode{padding:8px}
   body.feed-mode .card.feedcard{margin:0;border-radius:10px}
   body.feed-mode .res{font-size:15px}
@@ -167,20 +224,22 @@ body.feed-mode .abar{display:flex}
     <div><div class="bt">GET FIT</div><div class="bs">Coach Dashboard</div></div>
   </div>
   <nav id="topnav">
-    <button id="navAdmin" onclick="toggleGroup('adm')">Admin <span class="caret" id="caretAdm">▸</span></button>
+    <button id="navCal" class="nav-on" onclick="showAthletes()"><svg class="nico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.5A5 5 0 0 1 22 19"/></svg><span class="nlbl">Athletes</span></button>
+    <div class="sgroup collapsed" id="groupAth" style="display:none"></div>
+    <button id="navInbox" onclick="showInbox()"><svg class="nico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span class="nlbl">Inbox</span> <span class="ibadge" id="inboxBadge" style="display:none">0</span></button>
+    <button id="navProg" onclick="show('prog');toggleGroup('pl')"><svg class="nico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span class="nlbl">Plans</span> <span class="caret" id="caretPl">▸</span></button>
+    <div class="sgroup collapsed" id="groupPl"></div>
+    <button id="navAdmin" onclick="toggleGroup('adm')"><svg class="nico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span class="nlbl">Admin</span> <span class="caret" id="caretAdm">▸</span></button>
     <div class="sgroup collapsed" id="groupAdm">
       <button class="sitem" id="siMembers" onclick="showAdmin('members')">Members</button>
       <button class="sitem" id="siBuilds" onclick="showAdmin('builds')">Builds</button>
     </div>
-    <button id="navCal" class="nav-on" onclick="show('cal');toggleGroup('ath')">Athletes <span class="caret" id="caretAth">▾</span></button>
-    <div class="sgroup" id="groupAth"></div>
-    <button id="navProg" onclick="show('prog');toggleGroup('pl')">Plans <span class="caret" id="caretPl">▸</span></button>
-    <div class="sgroup collapsed" id="groupPl"></div>
+    <span class="caret" id="caretAth" style="display:none"></span>
   </nav>
   <div class="sidefoot">
     <div class="who" id="who"></div>
     <button onclick="signOutDash()">Sign out</button>
-    <div>v4.2.2</div>
+    <div>v5.1.0</div>
   </div>
 </aside>
 <div class="main">
@@ -195,6 +254,29 @@ body.feed-mode .abar{display:flex}
     <div id="lerr" class="err"></div>
   </div>
 
+  <div id="view-inbox" style="display:none">
+    <div class="card">
+      <div class="toolbar">
+        <div><h3>Inbox</h3><div class="muted" style="font-size:13px">Athlete comments you haven't opened yet. Opening a thread clears it.</div></div>
+        <button class="ghost" onclick="loadInbox(true)">↻ Refresh</button>
+      </div>
+      <div id="inboxList"></div>
+      <div id="inboxMsg" class="muted"></div>
+    </div>
+    <div class="card" id="threadCard" style="display:none">
+      <div class="toolbar">
+        <div><h3 id="threadTitle">Thread</h3><div class="muted" id="threadSub" style="font-size:13px"></div></div>
+        <button class="ghost" onclick="closeThread()">Close</button>
+      </div>
+      <div id="threadSession" class="muted" style="font-size:13px;margin-bottom:10px"></div>
+      <div id="threadMsgs"></div>
+      <div class="row" style="gap:8px;margin-top:12px;align-items:flex-start">
+        <textarea id="replyText" rows="3" placeholder="Reply as Coach Greg…" style="flex:1;border:1px solid #CBD5E1;border-radius:10px;padding:10px;font:inherit"></textarea>
+        <button id="replyBtn" onclick="sendReply()">Send</button>
+      </div>
+      <div id="replyMsg" class="muted" style="font-size:12px;margin-top:4px"></div>
+    </div>
+  </div>
   <div id="view-admin" style="display:none">
     <div class="card" id="admMembers">
       <div class="toolbar">
@@ -221,13 +303,26 @@ body.feed-mode .abar{display:flex}
       <div id="admBuildGroups" style="margin-top:14px"></div>
     </div>
   </div>
+  <div id="view-ath" style="display:none">
+    <div class="card">
+      <div class="toolbar" style="gap:12px;flex-wrap:wrap">
+        <h3 style="margin:0">Athletes <span class="muted" id="athCount" style="font-weight:400;font-size:14px"></span></h3>
+        <input id="athSearch" placeholder="Search" oninput="renderTiles()" style="padding:8px 12px;border:1px solid #DCE4EF;border-radius:10px;font:inherit;width:220px">
+        <span style="flex:1"></span>
+        <button onclick="openAddAthlete()">+ Athlete</button>
+      </div>
+      <div style="display:flex;gap:8px;margin:12px 0 18px;flex-wrap:wrap;align-items:center" id="athFilters"></div>
+      <div class="tiles" id="athGrid"></div>
+      <div class="muted" id="athMsg" style="margin-top:8px"></div>
+    </div>
+  </div>
   <div id="view-cal" style="display:none">
     <div class="card">
       <div class="row">
         <label>Athlete:</label>
         <select id="athlete" onchange="athleteChanged()" style="display:none"></select>
         <span id="athleteChips" class="row"></span>
-        <button class="ghost" onclick="openAddAthlete()">+ Add Athlete</button>
+        <button class="ghost" id="addAthBtn" onclick="openAddAthlete()">+ Add Athlete</button>
         <button class="ghost" id="reinvBtn" style="display:none" onclick="newInvite()">New invite code</button>
         <button class="danger" id="archBtn" style="display:none" onclick="archiveCurrent()">Archive athlete</button>
         <button class="danger" id="delBtn" style="display:none" onclick="openDeleteAthlete(athlete.value)">Delete athlete</button>
@@ -395,7 +490,8 @@ async function _enter(username){
   MYSUB=JSON.parse(atob(TOKEN.split(".")[1])).sub;
   who.textContent=username; login.style.display="none";
   document.body.classList.add("authed"); show("cal");
-  await loadPlans(); await loadAthletes(); loadInvites(); await loadAllAthletes(); loadFeed(); athleteChanged(); handleHash();
+  await loadPlans(); await loadAthletes(); loadInvites(); await loadAllAthletes(); loadFeed(); await loadInbox(); athleteChanged();
+  if(location.hash.startsWith("#/athlete/")) handleHash(); else showAthletes();   // v5.0: land on the tiles
 }
 async function signIn(){
   const d=await _cog("InitiateAuth",{AuthFlow:"USER_PASSWORD_AUTH",ClientId:CLIENT_ID,
@@ -410,7 +506,10 @@ function show(v){
   document.getElementById("view-cal").style.display = v==="cal"?"block":"none";
   document.getElementById("view-prog").style.display = v==="prog"?"block":"none";
   document.getElementById("view-admin").style.display = v==="admin"?"block":"none";
-  navCal.classList.toggle("nav-on",v==="cal");
+  document.getElementById("view-inbox").style.display = v==="inbox"?"block":"none";
+  document.getElementById("view-ath").style.display = v==="ath"?"block":"none";
+  navInbox.classList.toggle("nav-on",v==="inbox");
+  navCal.classList.toggle("nav-on",v==="cal"||v==="ath");
   navProg.classList.toggle("nav-on",v==="prog");
   navAdmin.classList.toggle("nav-on",v==="admin");
   if(v!=="admin"){siMembers.classList.remove("on");siBuilds.classList.remove("on");}
@@ -587,16 +686,138 @@ function renderFeed(){
         <span class="badge" style="background:${planColor(s.planTitle||"")}">${esc(s.planTitle||"")}</span>
         <span class="muted">${esc(s.scheduledDate)}${tm}</span></div>
       ${s.logResultText?`<pre style="margin-top:6px">${esc(s.logResultText)}</pre>`:""}
-      ${s.logComment?`<p class="muted" style="margin-top:4px">"${esc(s.logComment)}"</p>`:""}
+      ${s.logComment?`<p class="muted" style="margin-top:4px">"${esc(s.logComment)}"${s.commentCount?`<span class="cbub" onclick='openThread("${s.sub}","${esc(s.SK||"")}")'>💬 ${s.commentCount}${s.lastCommentBy==="athlete"?" · awaiting reply":""}</span>`:""}</p>`:""}
       ${thumbs(s)}
     </div>`;
   }).join("");
 }
+/* ---- v4.3.0 Inbox: workout comment threads ---- */
+let INBOX=[], THREAD=null;
+const _rel=iso=>{if(!iso)return "";const ms=Date.now()-Date.parse(iso);const h=Math.floor(ms/36e5),d=Math.floor(ms/864e5);
+  return h<1?"just now":h<24?h+"h ago":d+"d ago";};
+async function loadInbox(show){
+  const d=await api("/coach/comments/inbox"); if(d.error){inboxMsg.textContent=d.error;return}
+  INBOX=d.unread||[];
+  const b=document.getElementById("inboxBadge"); b.textContent=INBOX.length; b.style.display=INBOX.length?"inline-block":"none";
+  document.title=(INBOX.length?`(${INBOX.length}) `:"")+"GET FIT Coach";
+  inboxMsg.textContent=INBOX.length?"":"Inbox zero. Nothing waiting on you.";
+  if(document.getElementById("view-ath").style.display==="block") renderTiles();
+  inboxList.innerHTML=INBOX.map(c=>`<div class="ibx" onclick='openThread("${c.athleteSub}","${esc(c.sessionSK)}")'>
+     <div class="who">${esc(c.authorName)}</div>
+     <div class="what"><div>${esc(c.text)}</div><div class="muted" style="font-size:12px">${esc(c.sessionTitle)} · ${esc(c.scheduledDate)} <span class="badge" style="background:${planColor(c.planTitle||"")}">${esc(c.planTitle||"")}</span></div></div>
+     <div class="when">${_rel(c.createdAt)}</div></div>`).join("");
+}
+function showInbox(){ show("inbox"); loadInbox(); window.scrollTo({top:0}); }
+async function openThread(sub,sk){
+  show("inbox"); THREAD={sub,sk};
+  threadCard.style.display="block"; threadMsgs.innerHTML='<span class="muted">Loading…</span>'; replyMsg.textContent="";
+  const d=await api(`/coach/comments?athleteSub=${encodeURIComponent(sub)}&sessionSK=${encodeURIComponent(sk)}`);
+  if(d.error){threadMsgs.innerHTML=`<span class="muted">${esc(d.error)}</span>`;return}
+  const nm=names[sub]||(PROFS[sub]||{}).name||"Athlete"; const se=d.session||{};
+  threadTitle.textContent=`${nm} — ${se.coachTitle||se.title||"Session"}`;
+  threadSub.innerHTML=`${esc(se.scheduledDate||"")} · <span class="badge" style="background:${planColor(se.planTitle||"")}">${esc(se.planTitle||"")}</span>${se.logStatus?` · ${esc(se.logStatus)}`:""}`;
+  threadSession.innerHTML=(se.logResultText?`<pre style="margin:0 0 6px">${esc(se.logResultText)}</pre>`:"")+(se.rawText?`<div style="white-space:pre-wrap">${esc(se.rawText.slice(0,600))}</div>`:"");
+  threadMsgs.innerHTML=(d.comments||[]).map(c=>`<div class="bub ${c.author==="coach"?"coach":"ath"}"><div class="by">${esc(c.authorName)} · ${_rel(c.createdAt)}</div>${esc(c.text)}</div>`).join("")||'<span class="muted">No messages yet.</span>';
+  replyText.value=""; replyText.focus();
+  loadInbox();   // opening the thread cleared it server-side
+  threadCard.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function closeThread(){ THREAD=null; threadCard.style.display="none"; }
+async function sendReply(){
+  if(!THREAD) return; const t=replyText.value.trim(); if(!t) return;
+  replyBtn.disabled=true; replyMsg.textContent="Sending…";
+  const d=await api("/coach/comments",{method:"POST",body:JSON.stringify({athleteSub:THREAD.sub,sessionSK:THREAD.sk,text:t})});
+  replyBtn.disabled=false;
+  if(d.error){replyMsg.textContent="Couldn't send: "+d.error;return}
+  replyMsg.textContent="Sent — they'll get a push."; openThread(THREAD.sub,THREAD.sk);
+}
+replyText&&replyText.addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="Enter")sendReply();});
+setInterval(()=>{ if(document.visibilityState==="visible") loadInbox(); }, 60000);
+
+/* ---- v5.0 Athletes home: one tile per person ---- */
+let ALLATH=[], ATHFILTER="all";
+const _tileColors=["#3E5C8A","#5B7FA8","#2F4A78","#6B8CB8","#4A6FA5","#35507F","#7A9AC4"];
+function _initials(n){return (n||"?").split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join("")||"?";}
+function _agoShort(iso){if(!iso)return "—";const ms=Date.now()-Date.parse(iso);if(isNaN(ms))return "—";const h=Math.floor(ms/36e5),d=Math.floor(ms/864e5);return h<1?"now":h<24?h+"h":d+"d";}
+const BASE_GROUPS=["IG Promo"];   // v5.1: groups you can put athletes in; new ones are created from an athlete's page
+function allGroups(){ const set=new Set(BASE_GROUPS); ALLATH.forEach(x=>(x.tags||[]).forEach(t=>set.add(t))); return [...set]; }
+function setAthFilter(f){ATHFILTER=f;renderFilters();renderTiles();}
+function renderFilters(){
+  const el=document.getElementById("athFilters"); if(!el)return;
+  const archivedN=ALLATH.filter(x=>x.archived).length;
+  const chips=[["all","All"],["wait","Waiting on me"]].concat(allGroups().map(g=>["tag:"+g,g])).concat([["quiet","Quiet 7+ days"],["whoop","Sharing WHOOP"],["archived","Archived"+(archivedN?" · "+archivedN:"")]]);
+  el.innerHTML=chips.map(([k,l])=>`<button class="fchip${ATHFILTER===k?" on":""}" onclick='setAthFilter("${k}")'>${esc(l)}</button>`).join("")+
+    `<span class="muted" style="font-size:12px;margin-left:auto">Sorted: waiting on you first, then most recently seen</span>`;
+}
+function showAthletes(){
+  if(AMODE){ AMODE=null; document.body.classList.remove("athlete-mode"); _focusCards(false); }   // v5.0.2: sidebar Athletes also leaves athlete mode
+  show("ath"); renderTiles(); history.replaceState(null,"","#"); window.scrollTo({top:0}); }
+function renderTiles(){
+  const grid=document.getElementById("athGrid"); if(!grid)return;
+  const q=(document.getElementById("athSearch").value||"").trim().toLowerCase();
+  const waiting={}; INBOX.forEach(c=>{waiting[c.athleteSub]=(waiting[c.athleteSub]||0)+1;});
+  const now=Date.now();
+  renderFilters();
+  let list=ATHFILTER==="archived"?ALLATH.filter(x=>x.archived||x.enabled===false):ALLATH.filter(x=>!x.archived&&x.enabled!==false);
+  if(q) list=list.filter(x=>(x.name||"").toLowerCase().includes(q)||(x.username||"").toLowerCase().includes(q));
+  if(ATHFILTER.startsWith("tag:")) list=list.filter(x=>(x.tags||[]).includes(ATHFILTER.slice(4)));
+  if(ATHFILTER==="wait") list=list.filter(x=>waiting[x.sub]);
+  if(ATHFILTER==="quiet") list=list.filter(x=>!x.lastSeenAt||now-Date.parse(x.lastSeenAt)>7*864e5);
+  if(ATHFILTER==="whoop") list=list.filter(x=>WHOOPSUM[x.sub]);
+  list.sort((p,q2)=>(waiting[q2.sub]||0)-(waiting[p.sub]||0)||(q2.lastSeenAt||"").localeCompare(p.lastSeenAt||""));
+  document.getElementById("athCount").textContent="· "+ALLATH.filter(x=>!x.archived&&x.enabled!==false).length;
+  document.getElementById("athMsg").textContent=list.length?"":"Nobody matches.";
+  grid.innerHTML=list.map((x,i)=>{
+    const w=waiting[x.sub]||0, r=WHOOPSUM[x.sub], me=x.sub===MYSUB;
+    const col=me?"var(--navy)":_tileColors[(x.name||"").length%_tileColors.length];
+    const plan=(x.activePlans||[]).filter(p=>p!=="My Workouts")[0]||(x.activePlans||[])[0]||(x.coached?"no plan yet":"solo");
+    const rec=r&&r.recovery!=null?`<span class="dot" style="background:${r.recovery>=67?"#16A34A":r.recovery>=34?"#F59E0B":"#DC2626"}"></span>WHOOP ${Math.round(r.recovery)}%`:"";
+    const quiet=!x.lastSeenAt||now-Date.parse(x.lastSeenAt)>7*864e5;
+    return `<div class="tile${me?" me":""}" onclick='openAthlete("${x.sub}")' title="${esc(x.name)}">
+      <div class="face" style="background:${col}">${esc(_initials(x.name))}${w?`<span class="wait">${w} waiting</span>`:""}</div>
+      <div class="nm">${esc(x.name||x.username||"")}${me?' <span class="muted" style="font-weight:400">(you)</span>':""}</div>
+      <div class="pl" title="${esc(plan)}">${esc(plan)}</div>
+      ${(x.tags||[]).length?`<div class="pl" style="margin-top:2px">${(x.tags||[]).map(t=>`<span class="badge" style="background:var(--steel);font-size:10px">${esc(t)}</span>`).join(" ")}</div>`:""}
+      <div class="st">${rec||`<span class="muted">${x.coached?"coached":"solo"}</span>`}<span style="margin-left:auto;${quiet?"color:#B45309;font-weight:700":""}">${_agoShort(x.lastSeenAt)}</span></div>
+    </div>`;}).join("")+
+    `<div class="tile" style="border-style:dashed;background:transparent;align-items:center;justify-content:center;min-height:220px;color:var(--slate);font-weight:700" onclick="openAddAthlete()">+ Add athlete</div>`;
+}
+function openAthlete(sub){
+  const nm=names[sub]||(PROFS[sub]||{}).name||(ALLATH.find(x=>x.sub===sub)||{}).name||"Athlete";
+  if(sub===MYSUB){ show("cal"); selectAthlete(sub); return; }
+  if(![...athlete.options].some(o=>o.value===sub)){const o=document.createElement("option");o.value=sub;o.text=nm;athlete.appendChild(o);}
+  show("cal"); selectAthlete(sub); enterAthleteMode(sub); window.scrollTo({top:0});
+}
+/* per-session comment thread inside the Edit workout panel */
+async function loadSessThread(sub,sk){
+  const box=document.getElementById("sessThread"); if(!box)return;
+  const d=await api(`/coach/comments?athleteSub=${encodeURIComponent(sub)}&sessionSK=${encodeURIComponent(sk)}`);
+  if(d.error){box.innerHTML=`<span class="muted">${esc(d.error)}</span>`;return}
+  const msgs=(d.comments||[]).map(c=>`<div class="bub ${c.author==="coach"?"coach":"ath"}"><div class="by">${esc(c.authorName)} · ${_rel(c.createdAt)}</div>${esc(c.text)}</div>`).join("");
+  box.innerHTML=`<div style="display:flex;flex-direction:column">${msgs||'<span class="muted">No comments yet — start the conversation.</span>'}</div>
+    <div class="row" style="gap:6px;margin-top:8px;align-items:flex-start">
+      <textarea id="sessReply" rows="2" placeholder="Reply as Coach Greg…" style="flex:1;border:1px solid #CBD5E1;border-radius:8px;padding:8px;font:inherit;font-size:13px"></textarea>
+      <button id="sessReplyBtn" onclick='sendSessReply("${sub}","${esc(sk)}")'>Send</button></div>
+    <div id="sessReplyMsg" class="muted" style="font-size:11px;margin-top:3px"></div>`;
+  const ta=document.getElementById("sessReply"); ta.addEventListener("keydown",e=>{if((e.metaKey||e.ctrlKey)&&e.key==="Enter")sendSessReply(sub,sk);});
+  loadInbox();
+}
+async function sendSessReply(sub,sk){
+  const ta=document.getElementById("sessReply"); const t=(ta.value||"").trim(); if(!t)return;
+  sessReplyBtn.disabled=true; sessReplyMsg.textContent="Sending…";
+  const d=await api("/coach/comments",{method:"POST",body:JSON.stringify({athleteSub:sub,sessionSK:sk,text:t})});
+  sessReplyBtn.disabled=false;
+  if(d.error){sessReplyMsg.textContent="Couldn't send: "+d.error;return}
+  const s=sessions.find(x=>x.SK===sk); if(s){s.commentCount=(s.commentCount||0)+1; s.lastCommentBy="coach";}
+  await loadSessThread(sub,sk); render(new Date(cur.getFullYear(),cur.getMonth(),1),new Date(cur.getFullYear(),cur.getMonth()+1,0));
+}
+
 async function loadAllAthletes(){
   allmsg.textContent="Loading…"; allBody.innerHTML="";
   const d=await api("/coach/athletes/all");
   if(d.error){allmsg.textContent=d.error;return}
   const a=d.athletes||[];
+  ALLATH=a;   // v5.0 tiles
   allmsg.textContent=a.length?"":"No athletes yet.";
   await loadWhoopSummary();   // v4.2.0
   // v4.0.8 member intel: last-seen / build / device from athleteApi v58
@@ -711,10 +932,29 @@ function renderMiniProfile(){
     ["Nickname",esc(p.nickname||"—")],
     ["Push device",p.endpointArn?"✓ registered":"— none yet"],
     ["Status",ARCH.has(v)?"Archived":"Active"],
+    ["Groups",groupsEditor(v)],
     ["Invite code",invHtml]];
   profCard.innerHTML=rows.map(r=>`<b>${r[0]}</b><span>${r[1]}</span>`).join("");
   profCard.className="prof";
   profCard.style.display="grid";
+}
+function groupsEditor(sub){
+  const a=ALLATH.find(x=>x.sub===sub)||{}; const mine=new Set(a.tags||[]);
+  return allGroups().map(g=>`<label style="margin-right:10px;white-space:nowrap"><input type="checkbox" ${mine.has(g)?"checked":""} onchange='toggleGroup2("${sub}","${esc(g)}",this.checked)'> ${esc(g)}</label>`).join("")+
+    `<button class="ghost" style="padding:2px 8px" onclick='newGroup("${sub}")'>+ New group</button>`;
+}
+async function saveTags(sub,tags){
+  const d=await api("/coach/athletes/tags",{method:"POST",body:JSON.stringify({athleteSub:sub,tags})});
+  if(d.error){alert("Couldn't save groups: "+d.error);return}
+  const a=ALLATH.find(x=>x.sub===sub); if(a)a.tags=d.tags||tags;
+  renderMiniProfile(); renderFilters();
+}
+function toggleGroup2(sub,g,on){
+  const a=ALLATH.find(x=>x.sub===sub)||{tags:[]}; const t=new Set(a.tags||[]); on?t.add(g):t.delete(g); saveTags(sub,[...t]);
+}
+function newGroup(sub){
+  const g=(prompt("New group name (e.g. IG Promo, Spring Marathon):")||"").trim(); if(!g)return;
+  const a=ALLATH.find(x=>x.sub===sub)||{tags:[]}; saveTags(sub,[...new Set([...(a.tags||[]),g])]);
 }
 function athleteChanged(){
   closePanel();
@@ -747,7 +987,8 @@ async function endEnr(eid,title){
   if(d.ok){loadActivePlans();loadCal();loadRaces()}
   else alert(d.error||"failed");
 }
-async function setArchive(sub,arch){
+async function setArchive(sub,arch){ const _r=await _setArchive(sub,arch); await loadAllAthletes(); renderTiles(); return _r; }
+async function _setArchive(sub,arch){
   const nm=names[sub]||"this athlete";
   const msg=arch?`Archive ${nm}?\n\nTheir sign-in is disabled and they disappear from the roster. All data is kept. You can restore them anytime.`
                :`Restore ${nm}? They can sign in again.`;
@@ -816,8 +1057,8 @@ function render(first,last){
   const _t=new Date();
   const TODAYISO=`${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,"0")}-${String(_t.getDate()).padStart(2,"0")}`;
   mtitle.textContent=first.toLocaleDateString("en-US",{month:"long",year:"numeric"});
-  let html=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(n=>`<div class="dhead">${n}</div>`).join("");
-  for(let i=0;i<first.getDay();i++)html+=`<div class="day other"></div>`;
+  let html=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(n=>`<div class="dhead">${n}</div>`).join("");   // v5.0 Monday-first, matches the app
+  for(let i=0;i<(first.getDay()+6)%7;i++)html+=`<div class="day other"></div>`;
   for(let day=1;day<=last.getDate();day++){
     const iso=new Date(Date.UTC(first.getFullYear(),first.getMonth(),day)).toISOString().slice(0,10);
     const t=sessions.filter(s=>s.scheduledDate===iso);
@@ -832,7 +1073,7 @@ function render(first,last){
         return `<div class="sess${s.SK===selSK?" sel":""}" draggable="true"
           ondragstart='event.dataTransfer.setData("text/plain","${s.SK}")'
           style="background:${planColor(s.planTitle||"")}"
-          onclick='event.stopPropagation();openSess("${s.SK}")'>${s.coachTitle||s.title}${st}</div>`;
+          onclick='event.stopPropagation();openSess("${s.SK}")'>${s.coachTitle||s.title}${st}${s.commentCount?`<span class="cm${s.lastCommentBy==="athlete"?" wait":""}" title="${s.commentCount} comment(s)">💬${s.lastCommentBy==="athlete"?s.commentCount:""}</span>`:""}</div>`;
       }).join("")+`</div>`;
   }
   cal.innerHTML=html;
@@ -878,8 +1119,9 @@ function openSess(sk){
     <p class="muted">${s.scheduledDate}${s.weekNumber?" · week "+s.weekNumber:""} · ${stTxt}
       ${s.logTimeSeconds?(" · time "+Math.floor(s.logTimeSeconds/60)+":"+String(s.logTimeSeconds%60).padStart(2,"0")):""}</p>
     ${s.logResultText?`<p style="margin-top:8px"><b>Results:</b></p><pre>${esc(s.logResultText)}</pre>`:""}
-    ${s.logComment?`<p class="muted" style="margin-top:6px"><b>Athlete:</b> "${esc(s.logComment)}"</p>`:""}
     ${photos}
+    <p style="margin:10px 0 4px"><b>Conversation</b></p>
+    <div class="sthread" id="sessThread"><span class="muted">Loading…</span></div>
     <p style="margin:10px 0 4px"><b>Workout text</b> <span class="muted">(re-parsed on save — benchmark targets stay live)</span></p>
     <div style="margin:6px 0">Type: <select id="etype">
       ${["run","swim","bike","strength","conditioning","rest"].map(v=>
@@ -902,6 +1144,7 @@ function openSess(sk){
     <div id="emsg" class="muted" style="margin-top:8px"></div>`;
   window._origRaw=(s.rawText||"");
   panel.style.display="block";
+  if(athlete.value!==MYSUB) loadSessThread(athlete.value,sk); else document.getElementById("sessThread").innerHTML='<span class="muted">Comments are for athletes you coach.</span>';
   render(new Date(cur.getFullYear(),cur.getMonth(),1),new Date(cur.getFullYear(),cur.getMonth()+1,0));
 }
 async function saveSess(sk){
@@ -1097,7 +1340,7 @@ function _abar(){
   let b=document.querySelector(".abar");
   if(!b){
     b=document.createElement("div"); b.className="abar";
-    b.innerHTML=`<button onclick="exitAthleteMode()">← All Athletes</button>
+    b.innerHTML=`<button onclick="exitAthleteMode()">← All athletes</button>
       <span class="aname" id="abarName"></span><span class="asub" id="abarSub"></span>`;
     document.body.insertBefore(b, document.body.firstChild);
   }
@@ -1119,8 +1362,7 @@ function exitAthleteMode(){
   AMODE=null;
   document.body.classList.remove("athlete-mode");
   _focusCards(false);
-  history.pushState(null,"","#");
-  window.scrollTo({top:0,behavior:"smooth"});
+  showAthletes();   // v5.0: back lands on the tiles
 }
 function handleHash(){
   const m=location.hash.match(/^#\/athlete\/(.+)$/);
@@ -1243,6 +1485,7 @@ function toggleGroup(g,forceOpen){
 /* ---- v4.1.0 Admin: Members + Builds ---- */
 // Release ledger — one line per build. Keep newest first. status: dev | live | old | rej
 const RELEASES=[
+  {store:"1.2",build:"1.2 (21)",released:"2026-11-07",status:"tf",what:"TestFlight: workout comments (athlete ↔ coach threads, push tap opens session, unread badges); Monday-start calendar; APNs re-register on launch; sync replay fix; Face ID + notification prompts once; first-sign-up crash fix"},
   {store:"1.1",build:"1.1 (20)",released:"2026-09-21",status:"live",what:"WHOOP integration + coach sharing; share-to-install links; Strava matcher + disconnect fixes; app/device headers; plan rename; hardening"},
   {store:"1.0",build:"1.0 (19)",released:"2026-09-13",status:"old",what:"App Store launch (free). Terms + Privacy links, free-launch gating"},
   {store:"1.0",build:"1.0 (18)",released:"",status:"rej",what:"Rejected: pricing in screenshots, IAP not submitted, beta language, missing Terms"},
@@ -1306,7 +1549,7 @@ function renderAdmin(){
   const onLatest=latest?a.filter(x=>parseInt(x.lastAppBuild)===latest).length:0;
   const none=a.filter(x=>!x.lastAppBuild).length;
   admBuildStats.innerHTML=`${a.length} members${latest?` · newest reported build <b>${latest}</b> · ${onLatest} on it`:""} · ${none} not reported`;
-  const stx={live:'<span class="stx live">live</span>',dev:'<span class="stx dev">in development</span>',rev:'<span class="stx rev">in review</span>',old:'<span class="stx old">superseded</span>',rej:'<span class="stx rej">rejected</span>'};
+  const stx={live:'<span class="stx live">live</span>',dev:'<span class="stx dev">in development</span>',rev:'<span class="stx rev">in review</span>',old:'<span class="stx old">superseded</span>',rej:'<span class="stx rej">rejected</span>',tf:'<span class="stx rev">TestFlight</span>'};
   admLedgerBody.innerHTML=RELEASES.map(r=>`<tr><td>${esc(r.store)}</td><td>${esc(r.build)}</td><td>${r.released||"—"}</td><td>${stx[r.status]||""}</td><td>${esc(r.what)}</td></tr>`).join("");
   const groups={}; a.forEach(x=>{const k=x.lastAppBuild?`${x.lastAppVersion||"?"} (${x.lastAppBuild})`:"not reported";(groups[k]=groups[k]||[]).push(x);});
   const keys=Object.keys(groups).sort((p,q)=>{if(p==="not reported")return 1;if(q==="not reported")return -1;return (parseInt(q.match(/\((\d+)\)/)?.[1]||0))-(parseInt(p.match(/\((\d+)\)/)?.[1]||0));});
@@ -1321,7 +1564,8 @@ function renderAdmin(){
         <td class="${_hot(x.lastSeenAt)?"seen-hot":"seen-cold"}">${_ago(x.lastSeenAt)}</td><td>${esc((x.createdAt||"").slice(0,10))}</td></tr>`).join("")
     }</tbody></table><div style="height:14px"></div>`;}).join("");
 }
-function renderSideAth(){
+function renderSideAth(){   // v5.0.4: athlete list left the sidebar (tiles are the list)
+  return;
   const el=document.getElementById("groupAth"); if(!el||typeof athlete==="undefined")return;
   el.innerHTML=[...athlete.options].map(o=>{
     const label=o.value===MYSUB?"Me (coach)":esc(o.text.split(" — ")[0]);

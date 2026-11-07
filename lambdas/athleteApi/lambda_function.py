@@ -1,4 +1,7 @@
-"""GET FIT API v59.1 = v59 + DEFAULT_COACH_SUB fallback (unlinked athletes' comments still reach the coach).
+"""GET FIT API v59.4 = v59.3 + athlete groups (tags) + archived flag in the roster. Route: POST /coach/athletes/tags.
+GET FIT API v59.3 = v59.2 + self-logged workouts (POST /me/sessions) start the comment thread like /logs does.
+GET FIT API v59.2 = v59.1 + feed rows carry SK (dashboard opens threads from Recent Activity).
+GET FIT API v59.1 = v59 + DEFAULT_COACH_SUB fallback (unlinked athletes' comments still reach the coach).
 GET FIT API v59 = v58 + workout comments (athlete <-> coach threads on a session; see _comment_add).
   Rows: USER#<athlete> / CMT#<sessionUUID>#<ts>#<id>  {author, authorSub, authorName, text, createdAt, readByCoachAt, readByAthleteAt}
   SCHED row gets commentCount, lastCommentAt, lastCommentBy, athleteUnread (coach msgs the athlete hasn't opened).
@@ -172,10 +175,39 @@ def parse_cell(text):
         if m: p["intensity"] = {"kind": "percentBenchmark", "value": Decimal(100),
                                 "benchmarkRef": norm_ref(m.group(1))}
     return p
+# Cell TYPE keywords: first line of a cell may start with e.g. "SWIM — Easy aerobic".
+# Keyword (any case) → sessionType. Checked before the text heuristics below.
+_TYPE_KEYWORDS = [
+    ("swim",         "swim"),
+    ("bike",         "bike"),
+    ("ride",         "bike"),
+    ("row",          "row"),
+    ("erg",          "row"),
+    ("conditioning", "conditioning"),
+    ("wod",          "conditioning"),
+    ("strength",     "strength"),
+    ("lift",         "strength"),
+    ("rest",         "rest"),
+    ("note",         "rest"),          # the app has no "note" type; a NOTE cell is a rest day with text
+    ("race",         "run"),
+    ("run",          "run"),
+]
+_TYPE_RE = re.compile(r"^\s*([a-z]+)\s*(?:—|–|-|:)", re.I)
+
 def stype_bench(text):
     t = text.strip().lower()
     m = re.fullmatch(r"([\w/ .]+?)\s*(?:tt|time trial)", t)
     if m: return "timeTrial", norm_ref(t)
+    # v60: explicit TYPE keyword on the first line wins
+    first = t.split("\n", 1)[0]
+    km = _TYPE_RE.match(first)
+    if km:
+        kw = km.group(1).lower()
+        for k, st in _TYPE_KEYWORDS:
+            if kw == k:
+                if st == "run":
+                    break          # fall through to tempo/strength heuristics
+                return st, None
     if "tempo" in t or re.search(r"\bmin\s+t\b|\bt\s*@", t): return "tempo", None
     if re.search(r"squat|press|deadlift|bench", t): return "strength", None
     return "run", None
@@ -194,7 +226,9 @@ def athlete_title(category, label, session_type, raw_text=""):
         m = _re.match(r"day\s*(\d+)", lab, _re.I)
         return f"Swim {m.group(1)}" if m else (f"Swim \u00b7 {lab}" if lab else "Swim")
     if cat in ("run", ""):
-        return f"Today's Run \u00b7 {lab}" if lab and not lab.lower().startswith("day") else "Today's Run"
+        # v60.1: name by the resolved type so a BIKE/SWIM/ROW cell in a run plan isn't called a run
+        word = {"swim": "Swim", "bike": "Bike", "row": "Row", "rest": "Rest", "conditioning": "WOD"}.get(session_type, "Run")
+        return f"Today's {word} \u00b7 {lab}" if lab and not lab.lower().startswith("day") else f"Today's {word}"
     if cat == "conditioning":
         import re as _re
         m = _re.match(r"day\s*(\d+)", lab, _re.I)
@@ -886,6 +920,9 @@ def lambda_handler(event, context):
                     try: item["logRPE"] = int(b["logRPE"])
                     except Exception: pass
             TABLE.put_item(Item=item)
+            if item.get("logComment"):   # v59.3: self-logged note starts the comment thread too
+                try: _comment_add(sub, sk, "athlete", sub, item["logComment"], session=item)
+                except Exception as e: print(f"[v59.3] self-log->comment failed: {e}")
             return _resp(200, {"ok": True, "enrollmentId": eid, "title": title,
                                "sessionType": st, "sk": sk, "date": date,
                                "logged": ls in ("complete", "missed")})
@@ -1269,6 +1306,16 @@ def lambda_handler(event, context):
                 _notify(a, "Training plan ended",
                         f"{enr.get('planTitle','A plan')} was ended by your coach - logged work stays on your calendar")
             return _resp(200, {"ok": True, "sessionsRemoved": removed})
+        if rk == "POST /coach/athletes/tags":   # v59.4 — coach-defined groups on the athlete profile
+            b = _body(event)
+            a = b.get("athleteSub") or ""
+            tags = [str(t).strip()[:40] for t in (b.get("tags") or []) if str(t).strip()]
+            tags = list(dict.fromkeys(tags))[:20]
+            if not a: return _resp(400, {"error": "athleteSub required"})
+            TABLE.update_item(Key={"PK": f"USER#{a}", "SK": "PROFILE"},
+                UpdateExpression="SET tags = :t", ConditionExpression="attribute_exists(SK)",
+                ExpressionAttributeValues={":t": tags})
+            return _resp(200, {"ok": True, "tags": tags})
         if rk == "POST /coach/athletes/archive":
             b = _body(event)
             a = b["athleteSub"]; arch = bool(b.get("archive", True))
@@ -1365,7 +1412,7 @@ def lambda_handler(event, context):
                 if lek: kw["ExclusiveStartKey"] = lek
                 r = TABLE.scan(**kw)
                 for s in r.get("Items", []):
-                    out.append({"sub": s["PK"].replace("USER#", ""),
+                    out.append({"sub": s["PK"].replace("USER#", ""), "SK": s["SK"],   # v59.2
                         "title": s.get("coachTitle") or s.get("title", ""),
                         "planTitle": s.get("planTitle", ""),
                         "scheduledDate": s.get("scheduledDate", ""),
@@ -1442,7 +1489,10 @@ def lambda_handler(event, context):
                     "lastAppVersion": prof.get("lastAppVersion", ""),
                     "lastAppBuild": prof.get("lastAppBuild", ""),
                     "lastOSVersion": prof.get("lastOSVersion", ""),
-                    "lastDeviceModel": prof.get("lastDeviceModel", "")})
+                    "lastDeviceModel": prof.get("lastDeviceModel", ""),
+                    # v59.4 groups + archive
+                    "tags": [str(t) for t in (prof.get("tags") or [])],
+                    "archived": bool(prof.get("archived"))})
             out.sort(key=lambda x: x["createdAt"], reverse=True)
             return _resp(200, {"athletes": out})
         if rk == "POST /coach/subscriptions/grant":
