@@ -239,7 +239,7 @@ body.feed-mode .abar{display:flex}
   <div class="sidefoot">
     <div class="who" id="who"></div>
     <button onclick="signOutDash()">Sign out</button>
-    <div>v5.1.0</div>
+    <div>v5.1.2</div>
   </div>
 </aside>
 <div class="main">
@@ -932,11 +932,22 @@ function renderMiniProfile(){
     ["Nickname",esc(p.nickname||"—")],
     ["Push device",p.endpointArn?"✓ registered":"— none yet"],
     ["Status",ARCH.has(v)?"Archived":"Active"],
+    ["App",appRow(v)],
     ["Groups",groupsEditor(v)],
     ["Invite code",invHtml]];
   profCard.innerHTML=rows.map(r=>`<b>${r[0]}</b><span>${r[1]}</span>`).join("");
   profCard.className="prof";
   profCard.style.display="grid";
+}
+function appRow(sub){   // v5.1.1: which build the athlete is actually running
+  const a=ALLATH.find(x=>x.sub===sub)||{};
+  if(!a.lastAppVersion&&!a.lastAppBuild)
+    return a.lastSeenAt?`<span style="color:#B45309;font-weight:600">still on 1.0 (19) or older</span> <span class="muted">· opened ${_rel(a.lastSeenAt)} · needs the App Store update</span>`:'<span class="muted">never opened the app</span>';
+  const dev=(a.lastDeviceModel||"").replace(/^iPhone(\d+),(\d+)$/,"iPhone$1,$2");
+  const parts=[`<b>${esc(a.lastAppVersion||"?")} (${esc(a.lastAppBuild||"?")})</b>`];
+  if(dev) parts.push(esc(dev)); if(a.lastOSVersion) parts.push(esc(/^ios/i.test(a.lastOSVersion)?a.lastOSVersion:"iOS "+a.lastOSVersion));
+  if(a.lastSeenAt) parts.push("seen "+_rel(a.lastSeenAt));
+  return parts.join(" · ");
 }
 function groupsEditor(sub){
   const a=ALLATH.find(x=>x.sub===sub)||{}; const mine=new Set(a.tags||[]);

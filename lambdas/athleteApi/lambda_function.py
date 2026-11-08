@@ -1018,7 +1018,7 @@ def lambda_handler(event, context):
                        if e.get("coachManaged") and not e.get("isSubscription")}
             if managed:
                 today = _today()
-                horizon = (today + datetime.timedelta(days=(5 - today.weekday()) % 7)).isoformat()
+                horizon = (today + datetime.timedelta(days=(6 - today.weekday()) % 7)).isoformat()   # v60.2: through Sunday
                 items = [s for s in items
                          if s.get("enrollmentId") not in managed
                          or (s.get("scheduledDate") or "") <= horizon]
@@ -1033,7 +1033,7 @@ def lambda_handler(event, context):
                     or e.get("firstSessionDate") or "")[:10]
             if _mk:
                 _t2 = _today()
-                _hz = (_t2 + datetime.timedelta(days=(5 - _t2.weekday()) % 7)).isoformat()
+                _hz = (_t2 + datetime.timedelta(days=(6 - _t2.weekday()) % 7)).isoformat()   # v60.2: through Sunday
                 for s in items:
                     _eid = s.get("enrollmentId")
                     if _eid not in _mk: continue
@@ -1043,7 +1043,7 @@ def lambda_handler(event, context):
                     if _f:
                         try:
                             _fd = datetime.date.fromisoformat(_f)
-                            _w1 = (_fd + datetime.timedelta(days=(5 - _fd.weekday()) % 7)).isoformat()
+                            _w1 = (_fd + datetime.timedelta(days=(6 - _fd.weekday()) % 7)).isoformat()   # v60.2
                             if _sd <= _w1: continue
                         except ValueError: pass
                     s.pop("rawText", None); s.pop("prescriptions", None)
