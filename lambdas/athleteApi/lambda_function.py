@@ -1,4 +1,5 @@
-"""GET FIT API v59.4 = v59.3 + athlete groups (tags) + archived flag in the roster. Route: POST /coach/athletes/tags.
+"""GET FIT API v60.3 = profile photos (presign kind=profile, photoKey on PROFILE, photoUrl in roster) + GET /me/profile + POST /coach/athletes/photo.
+GET FIT API v59.4 = v59.3 + athlete groups (tags) + archived flag in the roster. Route: POST /coach/athletes/tags.
 GET FIT API v59.3 = v59.2 + self-logged workouts (POST /me/sessions) start the comment thread like /logs does.
 GET FIT API v59.2 = v59.1 + feed rows carry SK (dashboard opens threads from Recent Activity).
 GET FIT API v59.1 = v59 + DEFAULT_COACH_SUB fallback (unlinked athletes' comments still reach the coach).
@@ -586,6 +587,12 @@ def _push_data(user_sub, title, body, data):
     except Exception as e:
         print(f"push_data skipped: {e}"); return False
 
+def _photo_url(key):
+    """v60.3: 1-hour presigned GET for a profile photo key, or None."""
+    if not key: return None
+    try: return S3.generate_presigned_url("get_object", Params={"Bucket": BUCKET, "Key": key}, ExpiresIn=3600)
+    except Exception as e: print(f"photo url failed: {e}"); return None
+
 def _coach_of(athlete_sub):
     prof = TABLE.get_item(Key={"PK": f"USER#{athlete_sub}", "SK": "PROFILE"}).get("Item") or {}
     g = prof.get("GSI1PK") or ""
@@ -1090,8 +1097,22 @@ def lambda_handler(event, context):
             b = _body(event)
             nsk = _move(sub, b["sessionSK"], b["newDate"])
             return _resp(404, {"error": "not found"}) if not nsk else _resp(200, {"ok": True, "newSessionSK": nsk})
+        if rk == "GET /me/profile":   # v60.3
+            prof = TABLE.get_item(Key={"PK": f"USER#{sub}", "SK": "PROFILE"}).get("Item") or {}
+            out = {k: prof.get(k, "") for k in ("firstName", "lastName", "nickname", "email", "username", "name")}
+            out["coached"] = bool((prof.get("GSI1PK") or "").startswith("COACH#"))
+            out["photoUrl"] = _photo_url(prof.get("photoKey"))
+            out["tags"] = [str(t) for t in (prof.get("tags") or [])]
+            return _resp(200, out)
         if rk == "POST /photos/presign":
             b = _body(event)
+            if b.get("kind") == "profile":   # v60.3: one fixed key per athlete; overwrite on re-upload
+                key = f"profile/{sub}.jpg"
+                up = S3.generate_presigned_url("put_object", Params={"Bucket": BUCKET, "Key": key,
+                    "ContentType": b.get("contentType", "image/jpeg")}, ExpiresIn=900)
+                TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": "PROFILE"}, UpdateExpression="SET photoKey = :k",
+                                  ExpressionAttributeValues={":k": key})
+                return _resp(200, {"uploadUrl": up, "key": key})
             key = f"photos/{sub}/{uuid.uuid4()}.jpg"
             up = S3.generate_presigned_url("put_object", Params={"Bucket": BUCKET, "Key": key,
                 "ContentType": b.get("contentType", "image/jpeg")}, ExpiresIn=900)
@@ -1105,13 +1126,22 @@ def lambda_handler(event, context):
             return _resp(200, {"ok": True, "deleted": k})
         if rk == "POST /photos/view":
             b = _body(event)
-            if not b.get("key", "").startswith(f"photos/{sub}/") and not _is_coach(event):  # v49-photo-owner
+            if not (b.get("key", "").startswith(f"photos/{sub}/") or b.get("key") == f"profile/{sub}.jpg") and not _is_coach(event):  # v49-photo-owner, v60.3 profile
                 return _resp(403, {"error": "you can only view your own photos"})
             return _resp(200, {"viewUrl": S3.generate_presigned_url("get_object",
                 Params={"Bucket": BUCKET, "Key": b["key"]}, ExpiresIn=3600)})
 
         if rk.startswith("GET /coach") or rk.startswith("POST /coach"):
             if not _is_coach(event): return _resp(403, {"error": "coaches only"})
+        if rk == "POST /coach/athletes/photo":   # v60.3 — coach uploads a photo for an athlete
+            b = _body(event); a = b.get("athleteSub") or ""
+            if not a: return _resp(400, {"error": "athleteSub required"})
+            key = f"profile/{a}.jpg"
+            up = S3.generate_presigned_url("put_object", Params={"Bucket": BUCKET, "Key": key,
+                "ContentType": b.get("contentType", "image/jpeg")}, ExpiresIn=900)
+            TABLE.update_item(Key={"PK": f"USER#{a}", "SK": "PROFILE"}, UpdateExpression="SET photoKey = :k",
+                              ConditionExpression="attribute_exists(SK)", ExpressionAttributeValues={":k": key})
+            return _resp(200, {"uploadUrl": up, "key": key})
         if rk == "GET /coach/comments/inbox":   # v59 — athlete messages the coach hasn't opened, newest first
             r = TABLE.query(IndexName="GSI1", KeyConditionExpression=Key("GSI1PK").eq(f"CMTINBOX#{sub}"),
                             ScanIndexForward=False, Limit=100)
@@ -1492,7 +1522,8 @@ def lambda_handler(event, context):
                     "lastDeviceModel": prof.get("lastDeviceModel", ""),
                     # v59.4 groups + archive
                     "tags": [str(t) for t in (prof.get("tags") or [])],
-                    "archived": bool(prof.get("archived"))})
+                    "archived": bool(prof.get("archived")),
+                    "photoUrl": _photo_url(prof.get("photoKey"))})   # v60.3
             out.sort(key=lambda x: x["createdAt"], reverse=True)
             return _resp(200, {"athletes": out})
         if rk == "POST /coach/subscriptions/grant":

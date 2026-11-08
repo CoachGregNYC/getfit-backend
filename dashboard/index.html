@@ -239,7 +239,7 @@ body.feed-mode .abar{display:flex}
   <div class="sidefoot">
     <div class="who" id="who"></div>
     <button onclick="signOutDash()">Sign out</button>
-    <div>v5.1.2</div>
+    <div>v5.2.0</div>
   </div>
 </aside>
 <div class="main">
@@ -425,6 +425,13 @@ body.feed-mode .abar{display:flex}
   </div>
 
   <div id="view-prog" style="display:none">
+    <div class="card" id="progHome">
+      <div class="toolbar">
+        <div><h3 style="margin:0">Plans</h3><div class="muted" style="font-size:13px">Pick a plan below to view or edit it, or upload a new one — custom athlete plans included.</div></div>
+        <button onclick="showAddProgram()">⬆ Upload a plan CSV</button>
+      </div>
+      <div id="progList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
+    </div>
     <div class="card" id="addProgCard" style="display:none">
       <h3>Add a Program</h3>
       <div class="row" style="margin-bottom:10px">
@@ -774,7 +781,7 @@ function renderTiles(){
     const rec=r&&r.recovery!=null?`<span class="dot" style="background:${r.recovery>=67?"#16A34A":r.recovery>=34?"#F59E0B":"#DC2626"}"></span>WHOOP ${Math.round(r.recovery)}%`:"";
     const quiet=!x.lastSeenAt||now-Date.parse(x.lastSeenAt)>7*864e5;
     return `<div class="tile${me?" me":""}" onclick='openAthlete("${x.sub}")' title="${esc(x.name)}">
-      <div class="face" style="background:${col}">${esc(_initials(x.name))}${w?`<span class="wait">${w} waiting</span>`:""}</div>
+      <div class="face" style="background:${col}${x.photoUrl?`;background-image:url('${x.photoUrl}')`:""}">${x.photoUrl?"":esc(_initials(x.name))}${w?`<span class="wait">${w} waiting</span>`:""}</div>
       <div class="nm">${esc(x.name||x.username||"")}${me?' <span class="muted" style="font-weight:400">(you)</span>':""}</div>
       <div class="pl" title="${esc(plan)}">${esc(plan)}</div>
       ${(x.tags||[]).length?`<div class="pl" style="margin-top:2px">${(x.tags||[]).map(t=>`<span class="badge" style="background:var(--steel);font-size:10px">${esc(t)}</span>`).join(" ")}</div>`:""}
@@ -932,12 +939,32 @@ function renderMiniProfile(){
     ["Nickname",esc(p.nickname||"—")],
     ["Push device",p.endpointArn?"✓ registered":"— none yet"],
     ["Status",ARCH.has(v)?"Archived":"Active"],
+    ["Photo",photoRow(v)],
     ["App",appRow(v)],
     ["Groups",groupsEditor(v)],
     ["Invite code",invHtml]];
   profCard.innerHTML=rows.map(r=>`<b>${r[0]}</b><span>${r[1]}</span>`).join("");
   profCard.className="prof";
   profCard.style.display="grid";
+}
+function photoRow(sub){   // v5.2: athlete photo, coach can upload one
+  const a=ALLATH.find(x=>x.sub===sub)||{};
+  const img=a.photoUrl?`<img src="${a.photoUrl}" style="width:56px;height:56px;border-radius:12px;object-fit:cover;vertical-align:middle;margin-right:10px">`:`<span class="muted" style="margin-right:10px">none yet</span>`;
+  return `${img}<button class="ghost" style="padding:2px 8px" onclick="document.getElementById('photoPick').click()">${a.photoUrl?"Replace":"Upload"} photo</button>
+    <input type="file" id="photoPick" accept="image/*" style="display:none" onchange='uploadAthletePhoto("${sub}",this)'><span id="photoMsg" class="muted" style="margin-left:8px;font-size:12px"></span>`;
+}
+async function uploadAthletePhoto(sub,input){
+  const f=input.files&&input.files[0]; if(!f)return; const msg=document.getElementById("photoMsg"); msg.textContent="Resizing…";
+  const bmp=await createImageBitmap(f); const m=Math.max(bmp.width,bmp.height); const sc=Math.min(512/m,1);
+  const c=document.createElement("canvas"); c.width=Math.round(bmp.width*sc); c.height=Math.round(bmp.height*sc);
+  c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
+  const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.85));
+  msg.textContent="Uploading…";
+  const p=await api("/coach/athletes/photo",{method:"POST",body:JSON.stringify({athleteSub:sub,contentType:"image/jpeg"})});
+  if(p.error){msg.textContent="Couldn't get upload link: "+p.error;return}
+  const put=await fetch(p.uploadUrl,{method:"PUT",headers:{"Content-Type":"image/jpeg"},body:blob});
+  if(!put.ok){msg.textContent="Upload failed ("+put.status+")";return}
+  msg.textContent="Saved"; await loadAllAthletes(); renderMiniProfile(); renderTiles();
 }
 function appRow(sub){   // v5.1.1: which build the athlete is actually running
   const a=ALLATH.find(x=>x.sub===sub)||{};
@@ -1496,8 +1523,9 @@ function toggleGroup(g,forceOpen){
 /* ---- v4.1.0 Admin: Members + Builds ---- */
 // Release ledger — one line per build. Keep newest first. status: dev | live | old | rej
 const RELEASES=[
-  {store:"1.2",build:"1.2 (21)",released:"2026-11-07",status:"tf",what:"TestFlight: workout comments (athlete ↔ coach threads, push tap opens session, unread badges); Monday-start calendar; APNs re-register on launch; sync replay fix; Face ID + notification prompts once; first-sign-up crash fix"},
-  {store:"1.1",build:"1.1 (20)",released:"2026-09-21",status:"live",what:"WHOOP integration + coach sharing; share-to-install links; Strava matcher + disconnect fixes; app/device headers; plan rename; hardening"},
+  {store:"1.3",build:"1.3 (22)",released:"2026-11-08",status:"rev",what:"Profile as tiles (Me/Integrations/Membership/Support), profile photo upload, duplicate-account guard, programming drops Monday, startup sync coalescing, benchmarks post once"},
+  {store:"1.2",build:"1.2 (21)",released:"2026-11-07",status:"live",what:"Workout comments (athlete ↔ coach threads, push tap opens session, unread badges); Monday-start calendar; APNs re-register on launch; sync replay fix; Face ID + notification prompts once; first-sign-up crash fix"},
+  {store:"1.1",build:"1.1 (20)",released:"2026-09-21",status:"old",what:"WHOOP integration + coach sharing; share-to-install links; Strava matcher + disconnect fixes; app/device headers; plan rename; hardening"},
   {store:"1.0",build:"1.0 (19)",released:"2026-09-13",status:"old",what:"App Store launch (free). Terms + Privacy links, free-launch gating"},
   {store:"1.0",build:"1.0 (18)",released:"",status:"rej",what:"Rejected: pricing in screenshots, IAP not submitted, beta language, missing Terms"},
   {store:"—",build:"1.0 (15)",released:"2026-09-02",status:"old",what:"Last TestFlight-only build"},
@@ -1606,6 +1634,8 @@ function renderSidePlans(){
     `<div class="scat">${g}</div>`+by[g].sort((a,b)=>a.title<b.title?-1:1).map(p=>
       `<button class="sitem${p.planId===SELPLAN?" on":""}" onclick='selPlan("${p.planId}")'>${esc(p.title)}</button>`).join("")
   ).join("")+`<button class="sitem addrow" onclick='showAddProgram()'>+ Plan</button>`;
+  const pl=document.getElementById("progList");   // v5.1.3: same list as plain chips in the Plans view
+  if(pl) pl.innerHTML=[...el.querySelectorAll("button.sitem:not(.addrow)")].map(b=>`<button class="fchip" onclick="${b.getAttribute("onclick").replace(/"/g,"&quot;")}">${b.innerHTML}</button>`).join("");
 }
 function showAddProgram(){
   show("prog");
