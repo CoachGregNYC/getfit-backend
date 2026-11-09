@@ -1,4 +1,18 @@
-"""GET FIT API v5 = v4 + rolling subscriptions.
+import numbers
+import datetime
+"""GET FIT API v60.3 = profile photos (presign kind=profile, photoKey on PROFILE, photoUrl in roster) + GET /me/profile + POST /coach/athletes/photo.
+GET FIT API v59.4 = v59.3 + athlete groups (tags) + archived flag in the roster. Route: POST /coach/athletes/tags.
+GET FIT API v59.3 = v59.2 + self-logged workouts (POST /me/sessions) start the comment thread like /logs does.
+GET FIT API v59.2 = v59.1 + feed rows carry SK (dashboard opens threads from Recent Activity).
+GET FIT API v59.1 = v59 + DEFAULT_COACH_SUB fallback (unlinked athletes' comments still reach the coach).
+GET FIT API v59 = v58 + workout comments (athlete <-> coach threads on a session; see _comment_add).
+  Rows: USER#<athlete> / CMT#<sessionUUID>#<ts>#<id>  {author, authorSub, authorName, text, createdAt, readByCoachAt, readByAthleteAt}
+  SCHED row gets commentCount, lastCommentAt, lastCommentBy, athleteUnread (coach msgs the athlete hasn't opened).
+  Coach inbox = GSI1 query CMTINBOX#<coachSub> (athlete-authored rows until the coach opens the thread).
+  Routes: GET/POST /me/comments  ·  GET /coach/comments/inbox  ·  GET/POST /coach/comments
+  POST /logs with a comment also starts the thread (message #0). Pushes carry kind=comment + sessionSK.
+GET FIT API v58 = v57 + last-seen/build stamping on PROFILE (see _stamp_last_seen).
+GET FIT API v5 = v4 + rolling subscriptions.
 New: POST /subscriptions {planId,startDate,chosenWeekdays?}   test-mode subscribe, delivers weeks 1-4
      GET  /me/subscriptions
      POST /subscriptions/cancel {planId}                       autoRenew off; delivered weeks stay
@@ -20,6 +34,30 @@ PLATFORM_ARN_PROD = "arn:aws:sns:us-east-1:446100759389:app/APNS/getfit-apns-pro
 BUCKET = os.environ.get("PHOTO_BUCKET", "")
 POOL_ID = os.environ.get("POOL_ID", "")
 
+# v58-last-seen: stamp who is on what build. Additive, non-fatal.
+# Reads X-App-Version / X-App-Build / X-OS-Version / X-Device-Model headers
+# (case-insensitive; sent by iOS build 20+). Attributes are only written when
+# the header is present, so older clients still refresh lastSeenAt without
+# blanking a version they never reported. firstSeenAt is set once.
+def _stamp_last_seen(event, user_sub):
+    try:
+        hdrs = {str(k).lower(): v for k, v in (event.get("headers") or {}).items() if k}
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        expr = ["lastSeenAt = :t", "firstSeenAt = if_not_exists(firstSeenAt, :t)"]
+        vals = {":t": now}
+        for hdr, attr, ph in (("x-app-version", "lastAppVersion", ":v"),
+                              ("x-app-build", "lastAppBuild", ":b"),
+                              ("x-os-version", "lastOSVersion", ":o"),
+                              ("x-device-model", "lastDeviceModel", ":d")):
+            val = str(hdrs.get(hdr) or "").strip()[:48]
+            if val:
+                expr.append(f"{attr} = {ph}"); vals[ph] = val
+        TABLE.update_item(Key={"PK": f"USER#{user_sub}", "SK": "PROFILE"},
+            UpdateExpression="SET " + ", ".join(expr),
+            ExpressionAttributeValues=vals)
+    except Exception as e:
+        print(f"[v58 last-seen] non-fatal: {e}")
+
 def _clean(o):
     if isinstance(o, list): return [_clean(x) for x in o]
     if isinstance(o, dict): return {k: _clean(v) for k, v in o.items()}
@@ -28,6 +66,8 @@ def _clean(o):
 def _resp(code, body):
     return {"statusCode": code, "headers": {"Content-Type": "application/json"},
             "body": json.dumps(_clean(body))}
+# v56-benchmark-delete
+# v57-row-brick-types
 def _claims(e): return e["requestContext"]["authorizer"]["jwt"]["claims"]
 def _is_coach(e): return "coaches" in str(_claims(e).get("cognito:groups", ""))
 def _body(e): return json.loads(e.get("body") or "{}", parse_float=Decimal)
@@ -66,6 +106,58 @@ def colmap(cells):
     if wd: return [(i, w, lbl, w - 1) for (i, w, lbl) in wd], False
     K = len(dn)
     return [(i, None, f"Day {n}", (n - 1) * 7 // K) for (i, n, _) in dn], True
+SWIM_SECTIONS = (("warm", "warmup"), ("post", "postwork"), ("cool", "postwork"),
+                 ("workout", "workout"), ("main", "workout"))
+
+def _swim_section(line):
+    low = line.lower().rstrip(":").strip()
+    if len(low) > 24: return None
+    for key, sec in SWIM_SECTIONS:
+        if low.startswith(key): return sec
+    return None
+
+def parse_cell_multi(text, category=None):
+    """Swim plans: one prescription per line, tagged with its section.
+    warmup/postwork = done-or-not; workout = per-piece logging."""
+    if (category or "").lower() != "swim":
+        return [parse_cell(text)]
+    out, section = [], "workout"
+    for raw in str(text).splitlines():
+        line = raw.strip()
+        if not line: continue
+        sec = _swim_section(line)
+        if sec is not None:
+            section = sec; continue
+        low = line.lower()
+        m = re.fullmatch(r"rest\s*:?\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?|s)?\.?", low)
+        if m:
+            secs = int(m.group(1)) * (60 if (m.group(2) or "").startswith("min") else 1)
+            if out: out[-1]["restSeconds"] = secs
+            continue
+        p = {"order": len(out), "movement": "Swim", "section": section, "rawText": line}
+        if re.fullmatch(r"\d+\s*(rounds?|sets?)\b.*", low) or line.startswith("*"):
+            out.append(p); continue  # structural / annotation: no numbers
+        body = re.sub(r"^\d+\s*[-\u2013]\s*\d+\s*\.\s*", "", line)
+        m = re.search(r"(\d+)\s*[x\u00d7]\s*(\d+)", body)
+        if m:
+            p["sets"] = int(m.group(1)); p["distanceMeters"] = Decimal(m.group(2))
+        else:
+            m2 = re.match(r"^(\d+(?:,\d{3})*)\b(?!\s*\.)", body)
+            if m2: p["sets"] = 1; p["distanceMeters"] = Decimal(m2.group(1).replace(",", ""))
+        m = re.search(r"@\s*(\d+):(\d{2})", body)
+        if m: p["intervalSeconds"] = int(m.group(1)) * 60 + int(m.group(2))
+        else:
+            m = re.search(r"@\s*(\d+)\s*min\b", body, re.I)
+            if m: p["intervalSeconds"] = int(m.group(1)) * 60
+        m = re.search(r"rest\s*:?\s*(\d+)\s*min", low)
+        if m: p["restSeconds"] = int(m.group(1)) * 60
+        else:
+            m = re.search(r"rest\s*:(\d+)\b", low)
+            if m: p["restSeconds"] = int(m.group(1))
+        if "for time" in low: p["forTime"] = True
+        out.append(p)
+    return out or [parse_cell(text)]
+
 def parse_cell(text):
     p = {"order": 0, "movement": "Run", "rawText": text}
     t = text.lower()
@@ -86,10 +178,54 @@ def parse_cell(text):
         if m: p["intensity"] = {"kind": "percentBenchmark", "value": Decimal(100),
                                 "benchmarkRef": norm_ref(m.group(1))}
     return p
+# Cell TYPE keywords: first line of a cell may start with e.g. "SWIM — Easy aerobic".
+# Keyword (any case) → sessionType. Checked before the text heuristics below.
+_TYPE_KEYWORDS = [
+    ("swim",         "swim"),
+    ("bike",         "bike"),
+    ("ride",         "bike"),
+    ("row",          "row"),
+    ("erg",          "row"),
+    ("conditioning", "conditioning"),
+    ("wod",          "conditioning"),
+    ("strength",     "strength"),
+    ("lift",         "strength"),
+    ("rest",         "rest"),
+    ("note",         "rest"),          # the app has no "note" type; a NOTE cell is a rest day with text
+    ("race",         "run"),
+    ("run",          "run"),
+]
+_TYPE_RE = re.compile(r"^\s*([a-z]+)\s*(?:—|–|-|:)", re.I)
+
+
+def _link_ts(row):
+    """ISO date for an integration link row; tolerant of epoch ints or ISO strings under several names."""
+    if not row: return ""
+    for k in ("connectedAt", "linkedAt", "createdAt", "updatedAt"):
+        v = row.get(k)
+        if v in (None, ""): continue
+        try:
+            if isinstance(v, numbers.Number) or (isinstance(v, str) and v.isdigit()):
+                return datetime.datetime.utcfromtimestamp(int(v)).date().isoformat()
+            return str(v)[:10]
+        except Exception:
+            return str(v)
+    return ""
+
 def stype_bench(text):
     t = text.strip().lower()
     m = re.fullmatch(r"([\w/ .]+?)\s*(?:tt|time trial)", t)
     if m: return "timeTrial", norm_ref(t)
+    # v60: explicit TYPE keyword on the first line wins
+    first = t.split("\n", 1)[0]
+    km = _TYPE_RE.match(first)
+    if km:
+        kw = km.group(1).lower()
+        for k, st in _TYPE_KEYWORDS:
+            if kw == k:
+                if st == "run":
+                    break          # fall through to tempo/strength heuristics
+                return st, None
     if "tempo" in t or re.search(r"\bmin\s+t\b|\bt\s*@", t): return "tempo", None
     if re.search(r"squat|press|deadlift|bench", t): return "strength", None
     return "run", None
@@ -108,14 +244,16 @@ def athlete_title(category, label, session_type, raw_text=""):
         m = _re.match(r"day\s*(\d+)", lab, _re.I)
         return f"Swim {m.group(1)}" if m else (f"Swim \u00b7 {lab}" if lab else "Swim")
     if cat in ("run", ""):
-        return f"Today's Run \u00b7 {lab}" if lab and not lab.lower().startswith("day") else "Today's Run"
+        # v60.1: name by the resolved type so a BIKE/SWIM/ROW cell in a run plan isn't called a run
+        word = {"swim": "Swim", "bike": "Bike", "row": "Row", "rest": "Rest", "conditioning": "WOD"}.get(session_type, "Run")
+        return f"Today's {word} \u00b7 {lab}" if lab and not lab.lower().startswith("day") else f"Today's {word}"
     if cat == "conditioning":
         import re as _re
         m = _re.match(r"day\s*(\d+)", lab, _re.I)
         return f"WOD {m.group(1)}" if m else "Today's WOD"
     return lab or "Training"
 
-def parse_plan_csv(csv_text):
+def parse_plan_csv(csv_text, category=None):
     rows = list(csv.reader(io.StringIO(csv_text.replace("\r\n","\n").replace("\r","\n"))))
     cmap, floating, sessions, week = None, False, [], 0
     for row in rows:
@@ -135,16 +273,16 @@ def parse_plan_csv(csv_text):
                 lab = label if len(parts) == 1 else f"{label} \u00b7 {pi + 1}"
                 s = {"weekNumber": week, "dayOffset": (week - 1) * 7 + off,
                      "title": athlete_title(None, lab, st, part), "coachTitle": f"Week {week} \u00b7 {lab}", "sessionType": st,
-                     "rawText": part, "prescriptions": [parse_cell(part)]}
+                     "rawText": part, "prescriptions": parse_cell_multi(part, category)}
                 if not floating: s["weekday"] = wd
                 if bench: s["establishesBenchmark"] = bench
                 sessions.append(s)
     return sessions, week, floating
 def write_plan(title, category, author, publish, csv_text):
-    sessions, weeks, floating = parse_plan_csv(csv_text)
+    if "swim" in title.lower(): category = "swim"
+    sessions, weeks, floating = parse_plan_csv(csv_text, category)
     if not sessions: return None, "no sessions parsed - check header row"
     plan_id = str(uuid.uuid4())
-    if "swim" in title.lower(): category = "swim"
     meta = {"PK": f"PLAN#{plan_id}", "SK": "META", "itemType": "PLAN", "planId": plan_id,
             "title": title, "author": author, "category": category or "run",
             "durationWeeks": weeks, "isFloatingSchedule": floating,
@@ -157,7 +295,10 @@ def write_plan(title, category, author, publish, csv_text):
         for s in sessions:
             if s.get("sessionType") in (None, "run") and category in ("swim", "conditioning", "strength"):
                 s["sessionType"] = category if category != "conditioning" else "conditioning"
-                s["movement"] = {"swim": "Swim", "strength": "Strength", "conditioning": "Conditioning"}.get(category, s.get("movement", "Run"))
+            _mv = {"swim": "Swim", "strength": "Strength", "conditioning": "Conditioning"}.get(category)
+            if _mv:
+                for _p in s.get("prescriptions", []):
+                    if _p.get("movement") in (None, "Run"): _p["movement"] = _mv
             s["title"] = athlete_title(category, s.get("coachTitle","").split("\u00b7")[-1].strip() if s.get("coachTitle") else "", s.get("sessionType"), s.get("rawText",""))
             bw.put_item(Item={"PK": f"PLAN#{plan_id}",
                               "SK": f"SESSION#{s['dayOffset']:04d}#{uuid.uuid4()}",
@@ -189,7 +330,7 @@ def _move(user_sub, sk, new_date):
     TABLE.delete_item(Key={"PK": f"USER#{user_sub}", "SK": sk})
     return new_sk
 
-def materialize(user_sub, plan_id, start_str, chosen, coach_managed, coach_sub=None):
+def materialize(user_sub, plan_id, start_str, chosen, coach_managed, coach_sub=None, txn_id=None, product_id=None):
     meta, sessions = load_plan(plan_id)
     if not meta or not sessions: return None, "plan not found"
     start = datetime.date.fromisoformat(start_str)
@@ -214,6 +355,8 @@ def materialize(user_sub, plan_id, start_str, chosen, coach_managed, coach_sub=N
               "enrollmentId": enroll_id, "planId": plan_id, "planTitle": meta.get("title",""),
               "startDate": start_str, "status": "active", "coachManaged": coach_managed,
               "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    if txn_id: enroll["transactionId"] = txn_id
+    if product_id: enroll["productId"] = product_id
     if coach_sub:
         enroll["GSI1PK"] = f"COACH#{coach_sub}"
         enroll["GSI1SK"] = f"ATHLETE#{user_sub}#ENROLLMENT#{enroll_id}"
@@ -281,7 +424,7 @@ def deliver_sub_weeks(user_sub, sub, n_weeks=4):
             ExpressionAttributeValues={":w": new_done})
     return written
 
-def create_subscription(user_sub, plan_id, start_str, chosen, coach_managed=False, coach_sub=None, race_date=None, race_name=None):
+def create_subscription(user_sub, plan_id, start_str, chosen, coach_managed=False, coach_sub=None, race_date=None, race_name=None, txn_id=None, product_id=None):
     meta, _ = load_plan(plan_id)
     if not meta: return None, "plan not found"
     if meta.get("accessModel") != "subscription":
@@ -308,6 +451,12 @@ def create_subscription(user_sub, plan_id, start_str, chosen, coach_managed=Fals
               "startDate": start_str, "status": "active", "coachManaged": coach_managed,
               "isSubscription": True,
               "createdAt": sub["createdAt"]}
+    if txn_id:
+        enroll["transactionId"] = txn_id
+        sub["transactionId"] = txn_id
+    if product_id:
+        enroll["productId"] = product_id
+        sub["productId"] = product_id
     if coach_sub:
         enroll["GSI1PK"] = f"COACH#{coach_sub}"
         enroll["GSI1SK"] = f"ATHLETE#{user_sub}#ENROLLMENT#{enroll_id}"
@@ -438,6 +587,80 @@ def _notify(user_sub, title, body):
         return False
 
 
+# ---------- v59 workout comments ----------
+COACH_DISPLAY = os.environ.get("COACH_DISPLAY_NAME", "Coach Greg")
+DEFAULT_COACH_SUB = os.environ.get("DEFAULT_COACH_SUB", "")   # v59.1: inbox for athletes with no COACH# link
+
+def _push_data(user_sub, title, body, data):
+    """Like _notify but with custom keys (kind, sessionSK, ...) so a tap can open the session."""
+    try:
+        prof = TABLE.get_item(Key={"PK": f"USER#{user_sub}", "SK": "PROFILE"}).get("Item") or {}
+        ep = prof.get("endpointArn")
+        if not ep or prof.get("notificationsEnabled") is False: return False
+        aps = {"aps": {"alert": {"title": title, "body": body}, "sound": "default"}}; aps.update(data or {})
+        SNS.publish(TargetArn=ep, MessageStructure="json",
+            Message=json.dumps({"APNS": json.dumps(aps), "APNS_SANDBOX": json.dumps(aps), "default": body}))
+        return True
+    except Exception as e:
+        print(f"push_data skipped: {e}"); return False
+
+def _photo_url(key):
+    """v60.3: 1-hour presigned GET for a profile photo key, or None."""
+    if not key: return None
+    try: return S3.generate_presigned_url("get_object", Params={"Bucket": BUCKET, "Key": key}, ExpiresIn=3600)
+    except Exception as e: print(f"photo url failed: {e}"); return None
+
+def _coach_of(athlete_sub):
+    prof = TABLE.get_item(Key={"PK": f"USER#{athlete_sub}", "SK": "PROFILE"}).get("Item") or {}
+    g = prof.get("GSI1PK") or ""
+    coach = g.replace("COACH#", "") if g.startswith("COACH#") else None
+    return (coach or DEFAULT_COACH_SUB or None), prof
+
+def _session_uuid(session_sk):
+    parts = session_sk.split("#"); return parts[-1] if len(parts) >= 3 else session_sk
+
+def _comment_add(athlete_sub, session_sk, author, author_sub, text, session=None):
+    """Append one message to a session thread. author in ('athlete','coach'). Returns the row."""
+    text = (text or "").strip()[:2000]
+    if not text: return None
+    if session is None:
+        session = TABLE.get_item(Key={"PK": f"USER#{athlete_sub}", "SK": session_sk}).get("Item")
+    if not session: return None
+    coach_sub, prof = _coach_of(athlete_sub)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cid = uuid.uuid4().hex[:8]
+    row = {"PK": f"USER#{athlete_sub}", "SK": f"CMT#{_session_uuid(session_sk)}#{now}#{cid}", "itemType": "CMT",
+           "sessionSK": session_sk, "sessionTitle": session.get("coachTitle") or session.get("title", ""),
+           "scheduledDate": session.get("scheduledDate", ""), "planTitle": session.get("planTitle", ""),
+           "author": author, "authorSub": author_sub,
+           "authorName": COACH_DISPLAY if author == "coach" else (prof.get("name") or prof.get("username") or "Athlete"),
+           "text": text, "createdAt": now}
+    if author == "athlete" and coach_sub:
+        row["GSI1PK"] = f"CMTINBOX#{coach_sub}"; row["GSI1SK"] = now   # sits in the coach inbox until opened
+    TABLE.put_item(Item=row)
+    upd = "SET commentCount = if_not_exists(commentCount, :z) + :one, lastCommentAt = :t, lastCommentBy = :a"
+    vals = {":z": 0, ":one": 1, ":t": now, ":a": author}
+    if author == "coach":
+        upd += ", athleteUnread = if_not_exists(athleteUnread, :z) + :one"
+    TABLE.update_item(Key={"PK": f"USER#{athlete_sub}", "SK": session_sk}, UpdateExpression=upd, ExpressionAttributeValues=vals)
+    # notify the other side
+    label = f"{row['sessionTitle']} · {row['scheduledDate']}"
+    data = {"kind": "comment", "sessionSK": session_sk, "athleteSub": athlete_sub}
+    if author == "athlete" and coach_sub:
+        _push_data(coach_sub, f"{row['authorName']} commented", f"{label}: {text[:120]}", data)
+    elif author == "coach":
+        _push_data(athlete_sub, f"{COACH_DISPLAY} replied", f"{label}: {text[:120]}", data)
+    return row
+
+def _comment_thread(athlete_sub, session_sk):
+    r = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{athlete_sub}") &
+                    Key("SK").begins_with(f"CMT#{_session_uuid(session_sk)}#"))
+    out = []
+    for c in r.get("Items", []):
+        out.append({k: c.get(k) for k in ("SK", "author", "authorName", "text", "createdAt", "readByCoachAt", "readByAthleteAt")})
+    return out, r.get("Items", [])
+
+
 def _race_start(plan_id, race_date, chosen=None):
     meta, sessions = load_plan(plan_id)
     if not meta or not sessions: return None, "plan not found"
@@ -491,17 +714,34 @@ def lambda_handler(event, context):
             password = b["password"]
             name = b.get("name", username)
             if len(username) < 3: return _resp(400, {"error": "username too short"})
+            # v43-signup-email: collect email so password reset is possible
+            _su_email = (b.get("email") or "").strip()
+            _su_attrs = [{"Name": "preferred_username", "Value": name}]
+            if _su_email:
+                _su_attrs += [{"Name": "email", "Value": _su_email},
+                              {"Name": "email_verified", "Value": "true"}]
             try:
                 u = IDP.admin_create_user(UserPoolId=POOL_ID, Username=username,
                     MessageAction="SUPPRESS",
-                    UserAttributes=[{"Name": "preferred_username", "Value": name}])
+                    UserAttributes=_su_attrs)  # v43-signup-email
                 asub = next(a["Value"] for a in u["User"]["Attributes"] if a["Name"] == "sub")
             except IDP.exceptions.UsernameExistsException:
                 return _resp(409, {"error": "username taken"})
-            IDP.admin_set_user_password(UserPoolId=POOL_ID, Username=username,
-                                        Password=password, Permanent=True)
+            try:  # v45-signup-guard
+                IDP.admin_set_user_password(UserPoolId=POOL_ID, Username=username,
+                                            Password=password, Permanent=True)
+            except IDP.exceptions.InvalidPasswordException:
+                IDP.admin_delete_user(UserPoolId=POOL_ID, Username=username)
+                return _resp(400, {"error": "Password needs at least 8 characters "
+                    "including an uppercase letter, a lowercase letter, and a number."})
+            except Exception as e:
+                print(f"v45 signup set-pw failed: {e}")
+                try: IDP.admin_delete_user(UserPoolId=POOL_ID, Username=username)
+                except Exception as e2: print(f"v45 orphan cleanup failed: {e2}")
+                return _resp(500, {"error": "Could not finish creating the account. Please try again."})
             TABLE.put_item(Item={"PK": f"USER#{asub}", "SK": "PROFILE", "itemType": "PROFILE",
                 "name": name, "username": username, "selfSignup": True,
+                **({"email": _su_email} if _su_email else {}),
                 "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()})
             return _resp(200, {"username": username, "ok": True})
 
@@ -547,6 +787,7 @@ def lambda_handler(event, context):
             return _resp(200, {"username": inv["username"], "ok": True})
 
         claims = _claims(event); sub = claims["sub"]
+        _stamp_last_seen(event, sub)  # v58-last-seen
 
         if rk == "POST /subscriptions":
             b = _body(event)
@@ -555,7 +796,7 @@ def lambda_handler(event, context):
                 start_str, rerr = _race_start(b["planId"], b["raceDate"], b.get("chosenWeekdays"))
                 if rerr: return _resp(400, {"error": rerr})
             out, err = create_subscription(sub, b["planId"], start_str, b.get("chosenWeekdays"),
-                                           race_date=b.get("raceDate"), race_name=b.get("raceName"))
+                                           race_date=b.get("raceDate"), race_name=b.get("raceName"), txn_id=b.get("transactionId"), product_id=b.get("productId"))
             if not err and b.get("raceDate"): out["computedStart"] = start_str
             return _resp(400, {"error": err}) if err else _resp(200, out)
         if rk == "GET /me/subscriptions":
@@ -626,7 +867,7 @@ def lambda_handler(event, context):
             if b.get("raceDate") and not start_str:
                 start_str, rerr = _race_start(b["planId"], b["raceDate"], b.get("chosenWeekdays"))
                 if rerr: return _resp(400, {"error": rerr})
-            out, err = materialize(sub, b["planId"], start_str, b.get("chosenWeekdays"), False)
+            out, err = materialize(sub, b["planId"], start_str, b.get("chosenWeekdays"), False, txn_id=b.get("transactionId"), product_id=b.get("productId"))
             if err: return _resp(404, {"error": err})
             if b.get("raceDate"):
                 out["computedStart"] = start_str
@@ -636,12 +877,25 @@ def lambda_handler(event, context):
                 TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": f"ENROLLMENT#{out['enrollmentId']}"},
                     UpdateExpression=upd, ExpressionAttributeValues=vals)
             return _resp(200, out)
+        if rk == "POST /me/sessions/delete":
+            b = _body(event)
+            dsk = b.get("sessionSK") or ""
+            if not dsk.startswith("SCHED#"):
+                return _resp(400, {"error": "sessionSK required"})
+            it = TABLE.get_item(Key={"PK": f"USER#{sub}", "SK": dsk}).get("Item")
+            if not it:
+                return _resp(404, {"error": "not found"})
+            if it.get("planId") != "my-workouts" or it.get("coachManaged"):
+                return _resp(403, {"error": "only self-logged workouts can be deleted"})
+            TABLE.delete_item(Key={"PK": f"USER#{sub}", "SK": dsk},
+                ConditionExpression="attribute_exists(PK)")
+            return _resp(200, {"ok": True, "deleted": dsk})
         if rk == "POST /me/sessions":
             b = _body(event)
             date = b.get("date"); raw = (b.get("rawText") or "").strip()
             if not date or not raw: return _resp(400, {"error": "date and rawText required"})
             st, bench = stype_bench(raw)
-            if b.get("sessionType") in ("run", "swim", "bike", "strength", "rest", "conditioning"):
+            if b.get("sessionType") in ("run", "swim", "bike", "row", "brick", "strength", "rest", "conditioning"):
                 st = b["sessionType"]
             title = (b.get("title") or "").strip()[:60] or athlete_title(None, "", st, raw)
             eid = None
@@ -664,6 +918,19 @@ def lambda_handler(event, context):
                 "coachTitle": f"Athlete add · {date}", "sessionType": st, "rawText": raw,
                 "prescriptions": [parse_cell(raw)], "coachManaged": False,
                 "logStatus": "pending"}
+            _cp = b.get("prescriptions")
+            if isinstance(_cp, list) and _cp:
+                for _i, _p in enumerate(_cp):
+                    if isinstance(_p, dict) and "order" not in _p:
+                        _p["order"] = _i
+                item["prescriptions"] = _cp
+            _pr = b.get("pieceResults")
+            if isinstance(_pr, list) and _pr:
+                item["logPieceResults"] = _pr
+            if isinstance(b.get("warmupDone"), bool):
+                item["logWarmupDone"] = b["warmupDone"]
+            if isinstance(b.get("postworkDone"), bool):
+                item["logPostworkDone"] = b["postworkDone"]
             ls = b.get("logStatus")
             if ls in ("complete", "missed"):
                 item["logStatus"] = ls
@@ -677,19 +944,91 @@ def lambda_handler(event, context):
                     try: item["logRPE"] = int(b["logRPE"])
                     except Exception: pass
             TABLE.put_item(Item=item)
+            if item.get("logComment"):   # v59.3: self-logged note starts the comment thread too
+                try: _comment_add(sub, sk, "athlete", sub, item["logComment"], session=item)
+                except Exception as e: print(f"[v59.3] self-log->comment failed: {e}")
             return _resp(200, {"ok": True, "enrollmentId": eid, "title": title,
                                "sessionType": st, "sk": sk, "date": date,
                                "logged": ls in ("complete", "missed")})
         if rk == "POST /me/profile":
             b = _body(event)
-            allowed = {k: str(b[k])[:80] for k in ("nickname", "firstName", "lastName") if k in b}
+            allowed = {k: str(b[k])[:80] for k in ("nickname", "firstName", "lastName", "email") if k in b}  # v44-profile-email
             if not allowed: return _resp(400, {"error": "nothing to update"})
             upd = ", ".join(f"#{k} = :{k}" for k in allowed)
             TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": "PROFILE"},
                 UpdateExpression=f"SET {upd}",
                 ExpressionAttributeNames={f"#{k}": k for k in allowed},
                 ExpressionAttributeValues={f":{k}": v for k, v in allowed.items()})
+            _pe = (allowed.get("email") or "").strip()
+            if _pe:
+                try:
+                    IDP.admin_update_user_attributes(UserPoolId=POOL_ID,
+                        Username=claims.get("cognito:username") or claims.get("username") or sub,
+                        UserAttributes=[{"Name": "email", "Value": _pe},
+                                        {"Name": "email_verified", "Value": "true"}])
+                except Exception as e:
+                    print(f"v44 email attr update failed: {e}")
             return _resp(200, {"ok": True, "updated": list(allowed)})
+        if rk == "POST /me/enrollments/leave":  # v47-leave-plan
+            b = _body(event)
+            eid = b.get("enrollmentId")
+            if not eid: return _resp(400, {"error": "enrollmentId required"})
+            er2 = TABLE.get_item(Key={"PK": f"USER#{sub}", "SK": f"ENROLLMENT#{eid}"}).get("Item")
+            if not er2: return _resp(404, {"error": "enrollment not found"})
+            if er2.get("coachManaged"): return _resp(403, {"error": "coach-managed plans can't be left here"})
+            today_iso = _today().isoformat()
+            r2 = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
+                             Key("SK").begins_with("SCHED#"))
+            doomed = [s for s in r2.get("Items", [])
+                      if s.get("enrollmentId") == eid
+                      and (s.get("scheduledDate") or "") >= today_iso
+                      and s.get("logStatus") not in ("complete", "missed")
+                      and not s.get("logPieceResults") and not s.get("photoKeys")]
+            if len(doomed) > 400: return _resp(400, {"error": "safety cap exceeded"})
+            for s in doomed:
+                TABLE.delete_item(Key={"PK": s["PK"], "SK": s["SK"]},
+                    ConditionExpression="attribute_not_exists(logPieceResults) AND "
+                        "(attribute_not_exists(logStatus) OR logStatus = :p)",
+                    ExpressionAttributeValues={":p": "pending"})
+            TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": f"ENROLLMENT#{eid}"},
+                UpdateExpression="SET #st = :s, leftAt = :t",
+                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeValues={":s": "left",
+                    ":t": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+            return _resp(200, {"ok": True, "removed": len(doomed)})
+        if rk == "POST /me/account/delete":  # v48-account-delete
+            b = _body(event)
+            if b.get("confirm") != "DELETE":
+                return _resp(400, {"error": "confirmation required"})
+            # 1. every DynamoDB item under this user
+            _dd = 0; _lek = None
+            while True:
+                _kw = {"KeyConditionExpression": Key("PK").eq(f"USER#{sub}")}
+                if _lek: _kw["ExclusiveStartKey"] = _lek
+                _r = TABLE.query(**_kw)
+                for _it in _r.get("Items", []):
+                    TABLE.delete_item(Key={"PK": _it["PK"], "SK": _it["SK"]}); _dd += 1
+                _lek = _r.get("LastEvaluatedKey")
+                if not _lek: break
+            # 2. photos prefix in S3
+            _s3 = boto3.client("s3"); _pd = 0
+            try:
+                _pg = _s3.get_paginator("list_objects_v2")
+                for _pgr in _pg.paginate(Bucket="getfit-photos-446100759389", Prefix=f"photos/{sub}/"):
+                    _ks = [{"Key": o["Key"]} for o in _pgr.get("Contents", [])]
+                    if _ks:
+                        _s3.delete_objects(Bucket="getfit-photos-446100759389", Delete={"Objects": _ks})
+                        _pd += len(_ks)
+            except Exception as e:
+                print(f"v48 photo cleanup failed: {e}")
+            # 3. the Cognito user
+            _un = claims.get("cognito:username") or claims.get("username") or sub
+            try:
+                IDP.admin_delete_user(UserPoolId=POOL_ID, Username=_un)
+            except Exception as e:
+                print(f"v48 cognito delete failed: {e}")
+                return _resp(500, {"error": "account data removed but sign-in deletion failed; contact support"})
+            return _resp(200, {"ok": True, "itemsDeleted": _dd, "photosDeleted": _pd})
         if rk == "GET /me/enrollments":
             r = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{sub}") &
                             Key("SK").begins_with("ENROLLMENT#"))
@@ -703,14 +1042,60 @@ def lambda_handler(event, context):
                        if e.get("coachManaged") and not e.get("isSubscription")}
             if managed:
                 today = _today()
-                horizon = (today + datetime.timedelta(days=(5 - today.weekday()) % 7)).isoformat()
+                horizon = (today + datetime.timedelta(days=(6 - today.weekday()) % 7)).isoformat()   # v60.2: through Sunday
                 items = [s for s in items
                          if s.get("enrollmentId") not in managed
                          or (s.get("scheduledDate") or "") <= horizon]
                 count = len(items)
+            # v46-week-mask: marketplace/subscription content locks beyond this week;
+            # the plan's first week always unlocks. Dots+titles survive; content strips.
+            _mk = {}
+            for e in er.get("Items", []):
+                pid = e.get("planId")
+                if e.get("coachManaged") or pid in ("my-workouts", "coach-extras"): continue
+                _mk[e.get("enrollmentId")] = str(e.get("startDate") or e.get("firstSession")
+                    or e.get("firstSessionDate") or "")[:10]
+            if _mk:
+                _t2 = _today()
+                _hz = (_t2 + datetime.timedelta(days=(6 - _t2.weekday()) % 7)).isoformat()   # v60.2: through Sunday
+                for s in items:
+                    _eid = s.get("enrollmentId")
+                    if _eid not in _mk: continue
+                    _sd = (s.get("scheduledDate") or "")[:10]
+                    if not _sd or _sd <= _hz: continue
+                    _f = _mk[_eid]
+                    if _f:
+                        try:
+                            _fd = datetime.date.fromisoformat(_f)
+                            _w1 = (_fd + datetime.timedelta(days=(6 - _fd.weekday()) % 7)).isoformat()   # v60.2
+                            if _sd <= _w1: continue
+                        except ValueError: pass
+                    s.pop("rawText", None); s.pop("prescriptions", None)
+                    s["locked"] = True
             return _resp(200, {"sessions": items, "count": count})
+        if rk == "GET /me/comments":   # v59
+            q = event.get("queryStringParameters") or {}
+            ssk = q.get("sessionSK") or ""
+            if not ssk.startswith("SCHED#"): return _resp(400, {"error": "sessionSK required"})
+            thread, raw = _comment_thread(sub, ssk)
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            for c in raw:   # mark coach messages read by the athlete
+                if c.get("author") == "coach" and not c.get("readByAthleteAt"):
+                    TABLE.update_item(Key={"PK": c["PK"], "SK": c["SK"]}, UpdateExpression="SET readByAthleteAt = :t",
+                                      ExpressionAttributeValues={":t": now})
+            TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": ssk}, UpdateExpression="SET athleteUnread = :z",
+                              ConditionExpression="attribute_exists(SK)", ExpressionAttributeValues={":z": 0})
+            return _resp(200, {"sessionSK": ssk, "comments": thread})
+        if rk == "POST /me/comments":   # v59
+            b = _body(event)
+            ssk = b.get("sessionSK") or ""
+            if not ssk.startswith("SCHED#"): return _resp(400, {"error": "sessionSK required"})
+            row = _comment_add(sub, ssk, "athlete", sub, b.get("text"))
+            if not row: return _resp(404, {"error": "session not found or empty text"})
+            return _resp(200, {"ok": True, "comment": {k: row.get(k) for k in ("SK", "author", "authorName", "text", "createdAt")}})
         if rk == "POST /logs":
             b = _body(event)
+            prev = TABLE.get_item(Key={"PK": f"USER#{sub}", "SK": b["sessionSK"]}, ProjectionExpression="logComment").get("Item") or {}  # v59
             upd, vals = ["logStatus = :s", "loggedAt = :t"], {
                 ":s": b.get("status", "complete"),
                 ":t": datetime.datetime.now(datetime.timezone.utc).isoformat()}
@@ -720,24 +1105,91 @@ def lambda_handler(event, context):
             TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": b["sessionSK"]},
                               UpdateExpression="SET " + ", ".join(upd),
                               ExpressionAttributeValues=vals)
+            c = (b.get("comment") or "").strip()   # v59: the log note is message #0 of the thread
+            if c and c != (prev.get("logComment") or "").strip():
+                try: _comment_add(sub, b["sessionSK"], "athlete", sub, c)
+                except Exception as e: print(f"[v59] log->comment failed: {e}")
             return _resp(200, {"ok": True})
         if rk == "POST /sessions/move":
             b = _body(event)
             nsk = _move(sub, b["sessionSK"], b["newDate"])
             return _resp(404, {"error": "not found"}) if not nsk else _resp(200, {"ok": True, "newSessionSK": nsk})
+        if rk == "GET /me/profile":   # v60.3
+            prof = TABLE.get_item(Key={"PK": f"USER#{sub}", "SK": "PROFILE"}).get("Item") or {}
+            out = {k: prof.get(k, "") for k in ("firstName", "lastName", "nickname", "email", "username", "name")}
+            out["coached"] = bool((prof.get("GSI1PK") or "").startswith("COACH#"))
+            out["photoUrl"] = _photo_url(prof.get("photoKey"))
+            out["tags"] = [str(t) for t in (prof.get("tags") or [])]
+            return _resp(200, out)
         if rk == "POST /photos/presign":
             b = _body(event)
+            if b.get("kind") == "profile":   # v60.3: one fixed key per athlete; overwrite on re-upload
+                key = f"profile/{sub}.jpg"
+                up = S3.generate_presigned_url("put_object", Params={"Bucket": BUCKET, "Key": key,
+                    "ContentType": b.get("contentType", "image/jpeg")}, ExpiresIn=900)
+                TABLE.update_item(Key={"PK": f"USER#{sub}", "SK": "PROFILE"}, UpdateExpression="SET photoKey = :k",
+                                  ExpressionAttributeValues={":k": key})
+                return _resp(200, {"uploadUrl": up, "key": key})
             key = f"photos/{sub}/{uuid.uuid4()}.jpg"
             up = S3.generate_presigned_url("put_object", Params={"Bucket": BUCKET, "Key": key,
                 "ContentType": b.get("contentType", "image/jpeg")}, ExpiresIn=900)
             return _resp(200, {"uploadUrl": up, "key": key})
+        if rk == "POST /photos/delete":
+            b = _body(event)
+            k = b.get("key") or ""
+            if not k.startswith(f"photos/{sub}/"):
+                return _resp(403, {"error": "you can only delete your own photos"})
+            S3.delete_object(Bucket=BUCKET, Key=k)
+            return _resp(200, {"ok": True, "deleted": k})
         if rk == "POST /photos/view":
             b = _body(event)
+            if not (b.get("key", "").startswith(f"photos/{sub}/") or b.get("key") == f"profile/{sub}.jpg") and not _is_coach(event):  # v49-photo-owner, v60.3 profile
+                return _resp(403, {"error": "you can only view your own photos"})
             return _resp(200, {"viewUrl": S3.generate_presigned_url("get_object",
                 Params={"Bucket": BUCKET, "Key": b["key"]}, ExpiresIn=3600)})
 
         if rk.startswith("GET /coach") or rk.startswith("POST /coach"):
             if not _is_coach(event): return _resp(403, {"error": "coaches only"})
+        if rk == "POST /coach/athletes/photo":   # v60.3 — coach uploads a photo for an athlete
+            b = _body(event); a = b.get("athleteSub") or ""
+            if not a: return _resp(400, {"error": "athleteSub required"})
+            key = f"profile/{a}.jpg"
+            up = S3.generate_presigned_url("put_object", Params={"Bucket": BUCKET, "Key": key,
+                "ContentType": b.get("contentType", "image/jpeg")}, ExpiresIn=900)
+            TABLE.update_item(Key={"PK": f"USER#{a}", "SK": "PROFILE"}, UpdateExpression="SET photoKey = :k",
+                              ConditionExpression="attribute_exists(SK)", ExpressionAttributeValues={":k": key})
+            return _resp(200, {"uploadUrl": up, "key": key})
+        if rk == "GET /coach/comments/inbox":   # v59 — athlete messages the coach hasn't opened, newest first
+            r = TABLE.query(IndexName="GSI1", KeyConditionExpression=Key("GSI1PK").eq(f"CMTINBOX#{sub}"),
+                            ScanIndexForward=False, Limit=100)
+            out = []
+            for c in r.get("Items", []):
+                out.append({"athleteSub": c["PK"].replace("USER#", ""), "authorName": c.get("authorName", ""),
+                            "sessionSK": c.get("sessionSK"), "sessionTitle": c.get("sessionTitle", ""),
+                            "scheduledDate": c.get("scheduledDate", ""), "planTitle": c.get("planTitle", ""),
+                            "text": c.get("text", ""), "createdAt": c.get("createdAt", "")})
+            return _resp(200, {"unread": out, "count": len(out)})
+        if rk == "GET /coach/comments":   # v59 — full thread; opening it clears those messages from the inbox
+            q = event.get("queryStringParameters") or {}
+            a, ssk = q.get("athleteSub") or "", q.get("sessionSK") or ""
+            if not a or not ssk.startswith("SCHED#"): return _resp(400, {"error": "athleteSub and sessionSK required"})
+            thread, raw = _comment_thread(a, ssk)
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            for c in raw:
+                if c.get("author") == "athlete" and not c.get("readByCoachAt"):
+                    TABLE.update_item(Key={"PK": c["PK"], "SK": c["SK"]},
+                        UpdateExpression="SET readByCoachAt = :t REMOVE GSI1PK, GSI1SK", ExpressionAttributeValues={":t": now})
+            sess = TABLE.get_item(Key={"PK": f"USER#{a}", "SK": ssk}).get("Item") or {}
+            return _resp(200, {"athleteSub": a, "sessionSK": ssk, "comments": thread,
+                               "session": {k: sess.get(k) for k in ("title", "coachTitle", "planTitle", "scheduledDate", "logStatus",
+                                           "logResultText", "logComment", "logTimeSeconds", "loggedAt", "rawText")}})
+        if rk == "POST /coach/comments":   # v59
+            b = _body(event)
+            a, ssk = b.get("athleteSub") or "", b.get("sessionSK") or ""
+            if not a or not ssk.startswith("SCHED#"): return _resp(400, {"error": "athleteSub and sessionSK required"})
+            row = _comment_add(a, ssk, "coach", sub, b.get("text"))
+            if not row: return _resp(404, {"error": "session not found or empty text"})
+            return _resp(200, {"ok": True, "comment": {k: row.get(k) for k in ("SK", "author", "authorName", "text", "createdAt")}})
         if rk == "POST /coach/sessions/update":
             b = _body(event)
             a = b["athleteSub"]; sk = b["sessionSK"]
@@ -756,6 +1208,21 @@ def lambda_handler(event, context):
                 sets += ["rawText = :r", "prescriptions = :p", "sessionType = :st"]
                 vals[":r"] = new_raw; vals[":p"] = [parse_cell(new_raw)]; vals[":st"] = st
                 item["rawText"] = new_raw
+            # v42-movement-fix: body sessionType wins over stype_bench guess;
+            # prescriptions carry the final type's movement
+            _bst = b.get("sessionType")
+            if _bst in ("run", "swim", "bike", "row", "brick", "strength", "rest", "conditioning"):
+                if "rawText" in b:
+                    vals[":st"] = _bst
+                else:
+                    sets.append("sessionType = :st"); vals[":st"] = _bst
+            _fin = vals.get(":st") or item.get("sessionType")
+            _mv = {"swim": "Swim", "bike": "Bike", "row": "Row", "brick": "Brick", "strength": "Strength",
+                   "conditioning": "Conditioning"}.get(_fin)
+            if _mv and ":p" in vals:
+                for _pp in vals[":p"]:
+                    if _pp.get("movement") in (None, "Run"):
+                        _pp["movement"] = _mv
             if b.get("title"):
                 sets += ["title = :t", "coachTitle = :t"]
                 vals[":t"] = b["title"]
@@ -776,7 +1243,7 @@ def lambda_handler(event, context):
             b = _body(event)
             a = b["athleteSub"]; date = b["date"]; raw = b["rawText"]
             st, bench = stype_bench(raw)
-            if b.get("sessionType") in ("run", "swim", "bike", "strength", "rest", "conditioning"):
+            if b.get("sessionType") in ("run", "swim", "bike", "row", "brick", "strength", "rest", "conditioning"):
                 st = b["sessionType"]
             title = b.get("title") or athlete_title(None, "", st, raw)
             eid = None
@@ -835,6 +1302,14 @@ def lambda_handler(event, context):
                 "dateISO": date_iso, "source": b.get("source","app"),
                 "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat()})
             return _resp(200, {"ok": True})
+        if rk == "DELETE /me/benchmarks":  # v56-benchmark-delete
+            b = _body(event)
+            movement = b.get("movement")
+            date_iso = b.get("dateISO")
+            if not movement or not date_iso:
+                return _resp(400, {"error": "movement and dateISO required"})
+            TABLE.delete_item(Key={"PK": f"USER#{sub}", "SK": f"BENCH#{movement}#{date_iso}"})
+            return _resp(200, {"ok": True, "deleted": f"BENCH#{movement}#{date_iso}"})
         if rk == "GET /coach/enrollments":
             q = event.get("queryStringParameters") or {}
             a = q.get("athleteSub")
@@ -878,6 +1353,16 @@ def lambda_handler(event, context):
                 _notify(a, "Training plan ended",
                         f"{enr.get('planTitle','A plan')} was ended by your coach - logged work stays on your calendar")
             return _resp(200, {"ok": True, "sessionsRemoved": removed})
+        if rk == "POST /coach/athletes/tags":   # v59.4 — coach-defined groups on the athlete profile
+            b = _body(event)
+            a = b.get("athleteSub") or ""
+            tags = [str(t).strip()[:40] for t in (b.get("tags") or []) if str(t).strip()]
+            tags = list(dict.fromkeys(tags))[:20]
+            if not a: return _resp(400, {"error": "athleteSub required"})
+            TABLE.update_item(Key={"PK": f"USER#{a}", "SK": "PROFILE"},
+                UpdateExpression="SET tags = :t", ConditionExpression="attribute_exists(SK)",
+                ExpressionAttributeValues={":t": tags})
+            return _resp(200, {"ok": True, "tags": tags})
         if rk == "POST /coach/athletes/archive":
             b = _body(event)
             a = b["athleteSub"]; arch = bool(b.get("archive", True))
@@ -974,7 +1459,7 @@ def lambda_handler(event, context):
                 if lek: kw["ExclusiveStartKey"] = lek
                 r = TABLE.scan(**kw)
                 for s in r.get("Items", []):
-                    out.append({"sub": s["PK"].replace("USER#", ""),
+                    out.append({"sub": s["PK"].replace("USER#", ""), "SK": s["SK"],   # v59.2
                         "title": s.get("coachTitle") or s.get("title", ""),
                         "planTitle": s.get("planTitle", ""),
                         "scheduledDate": s.get("scheduledDate", ""),
@@ -983,7 +1468,8 @@ def lambda_handler(event, context):
                         "logTimeSeconds": s.get("logTimeSeconds"),
                         "logResultText": (s.get("logResultText") or "")[:300],
                         "logComment": (s.get("logComment") or "")[:300],
-                        "logPhotoKeys": s.get("logPhotoKeys") or []})
+                        "logPhotoKeys": s.get("logPhotoKeys") or [],
+                        "commentCount": int(s.get("commentCount") or 0), "lastCommentBy": s.get("lastCommentBy")})  # v59
                 lek = r.get("LastEvaluatedKey")
                 if not lek: break
             out.sort(key=lambda x: x["loggedAt"], reverse=True)
@@ -1026,6 +1512,9 @@ def lambda_handler(event, context):
                 asub = attrs.get("sub")
                 if not asub: continue
                 prof = TABLE.get_item(Key={"PK": f"USER#{asub}", "SK": "PROFILE"}).get("Item") or {}
+                # v61: integration link rows (written by getfit-strava / getfit-whoop)
+                strava_row = TABLE.get_item(Key={"PK": f"USER#{asub}", "SK": "STRAVA"}).get("Item") or {}
+                whoop_row = TABLE.get_item(Key={"PK": f"USER#{asub}", "SK": "WHOOP"}).get("Item") or {}
                 enr = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{asub}") &
                                   Key("SK").begins_with("ENROLLMENT#")).get("Items", [])
                 sched = TABLE.query(KeyConditionExpression=Key("PK").eq(f"USER#{asub}") &
@@ -1042,7 +1531,24 @@ def lambda_handler(event, context):
                     "coached": bool(prof.get("GSI1PK")),
                     "provider": prof.get("provider", ""),
                     "activePlans": [e.get("planTitle", "?") for e in enr if e.get("status") == "active"],
-                    "logged": logged, "missed": missed})
+                    "logged": logged, "missed": missed,
+                    # v58-last-seen
+                    "selfSignup": bool(prof.get("selfSignup")),
+                    "firstSeenAt": prof.get("firstSeenAt", ""),
+                    "lastSeenAt": prof.get("lastSeenAt", ""),
+                    "lastAppVersion": prof.get("lastAppVersion", ""),
+                    "lastAppBuild": prof.get("lastAppBuild", ""),
+                    "lastOSVersion": prof.get("lastOSVersion", ""),
+                    "lastDeviceModel": prof.get("lastDeviceModel", ""),
+                    # v59.4 groups + archive
+                    "tags": [str(t) for t in (prof.get("tags") or [])],
+                    "archived": bool(prof.get("archived")),
+                    "photoUrl": _photo_url(prof.get("photoKey")),   # v60.3
+                    # v61 integrations
+                    "stravaLinked": bool(strava_row),
+                    "stravaConnectedAt": _link_ts(strava_row),
+                    "whoopLinked": bool(whoop_row),
+                    "whoopConnectedAt": _link_ts(whoop_row)})
             out.sort(key=lambda x: x["createdAt"], reverse=True)
             return _resp(200, {"athletes": out})
         if rk == "POST /coach/subscriptions/grant":
@@ -1114,6 +1620,83 @@ def lambda_handler(event, context):
             b = _body(event)
             nsk = _move(b["athleteSub"], b["sessionSK"], b["newDate"])
             return _resp(404, {"error": "not found"}) if not nsk else _resp(200, {"ok": True, "newSessionSK": nsk})
+        if rk == "POST /coach/plans/addweek":  # v53-add-week
+            b = _body(event)
+            pid = b.get("planId")
+            if not pid: return _resp(400, {"error": "planId required"})
+            meta = TABLE.get_item(Key={"PK": f"PLAN#{pid}", "SK": "META"}).get("Item")
+            if not meta: return _resp(404, {"error": "plan not found"})
+            nw = int(meta.get("durationWeeks", 0)) + 1
+            TABLE.update_item(Key={"PK": f"PLAN#{pid}", "SK": "META"},
+                UpdateExpression="SET durationWeeks = :w",
+                ExpressionAttributeValues={":w": nw})
+            return _resp(200, {"ok": True, "durationWeeks": nw})
+        if rk == "POST /coach/plans/session/update":  # v51-plan-edit
+            b = _body(event)
+            pid = b.get("planId"); psk = b.get("sessionSK")
+            if not pid or not psk or not psk.startswith("SESSION"):
+                return _resp(400, {"error": "planId + sessionSK required"})
+            item = TABLE.get_item(Key={"PK": f"PLAN#{pid}", "SK": psk}).get("Item")
+            if not item: return _resp(404, {"error": "plan session not found"})
+            meta = TABLE.get_item(Key={"PK": f"PLAN#{pid}", "SK": "META"}).get("Item") or {}
+            sets = []; vals = {}
+            if "rawText" in b:
+                new_raw = b["rawText"]
+                st, bench = stype_bench(new_raw)
+                sets += ["rawText = :r", "prescriptions = :p", "sessionType = :st"]
+                vals[":r"] = new_raw
+                vals[":p"] = parse_cell_multi(new_raw, meta.get("category"))
+                vals[":st"] = st
+            _bst = b.get("sessionType")
+            if _bst in ("run", "swim", "bike", "row", "brick", "strength", "rest", "conditioning"):
+                if "rawText" in b: vals[":st"] = _bst
+                else: sets.append("sessionType = :st"); vals[":st"] = _bst
+            _fin = vals.get(":st") or item.get("sessionType")
+            _mv = {"swim": "Swim", "bike": "Bike", "row": "Row", "brick": "Brick", "strength": "Strength",
+                   "conditioning": "Conditioning"}.get(_fin)
+            if _mv and ":p" in vals:
+                for _pp in (vals[":p"] or []):
+                    if isinstance(_pp, dict) and _pp.get("movement") in (None, "Run"):
+                        _pp["movement"] = _mv
+            if b.get("title"):
+                sets.append("title = :t"); vals[":t"] = b["title"]
+            _nd = b.get("newDayOffset")  # v52-plan-move
+            try: _nd = int(_nd) if _nd is not None else None
+            except (TypeError, ValueError): _nd = None
+            _cur = int(item.get("dayOffset", 0))
+            _moving = _nd is not None and 0 <= _nd and _nd != _cur
+            if not sets and not _moving:
+                return _resp(400, {"error": "nothing to update"})
+            sets.append("templateEdited = :te"); vals[":te"] = True
+            if _moving:
+                _new = dict(item)
+                _new["dayOffset"] = _nd
+                if ":r" in vals: _new["rawText"] = vals[":r"]
+                if ":p" in vals: _new["prescriptions"] = vals[":p"]
+                if ":st" in vals: _new["sessionType"] = vals[":st"]
+                if ":t" in vals: _new["title"] = vals[":t"]
+                _new["templateEdited"] = True
+                _sfx = psk.split("#", 2)[2] if psk.count("#") >= 2 else psk
+                _nsk = f"SESSION#{_nd:04d}#{_sfx}"
+                _new["SK"] = _nsk
+                TABLE.put_item(Item=_new)
+                TABLE.delete_item(Key={"PK": f"PLAN#{pid}", "SK": psk})
+                return _resp(200, {"ok": True, "newSessionSK": _nsk,
+                    "sessionType": _new.get("sessionType")})
+            TABLE.update_item(Key={"PK": f"PLAN#{pid}", "SK": psk},
+                UpdateExpression="SET " + ", ".join(sets),
+                ExpressionAttributeValues=vals)
+            return _resp(200, {"ok": True, "sessionType": vals.get(":st") or item.get("sessionType"),
+                "prescriptions": len(vals.get(":p") or []) if ":p" in vals else None})
+        if rk == "GET /coach/plans/detail":  # v50-plan-detail
+            q = event.get("queryStringParameters") or {}
+            pid = q.get("planId")
+            if not pid: return _resp(400, {"error": "planId required"})
+            r = TABLE.query(KeyConditionExpression=Key("PK").eq(f"PLAN#{pid}") &
+                            Key("SK").begins_with("SESSION"))
+            ss = sorted(r.get("Items", []), key=lambda s: int(s.get("dayOffset", 0)))
+            meta = TABLE.get_item(Key={"PK": f"PLAN#{pid}", "SK": "META"}).get("Item") or {}
+            return _resp(200, {"plan": meta, "sessions": ss, "count": len(ss)})
         if rk == "POST /coach/plans/upload":
             b = _body(event)
             out, err = write_plan(b["title"], b.get("category", "run"),
@@ -1124,14 +1707,27 @@ def lambda_handler(event, context):
             b = _body(event)
             username = b["username"].strip().lower()
             name = b.get("name", username)
+            # v45-coach-email: coach-created athletes get a recoverable account
+            _cc_email = (b.get("email") or "").strip()
+            _cc_attrs = [{"Name": "preferred_username", "Value": name}] if name else []
+            if _cc_email:
+                _cc_attrs += [{"Name": "email", "Value": _cc_email},
+                              {"Name": "email_verified", "Value": "true"}]
             try:
                 u = IDP.admin_create_user(UserPoolId=POOL_ID, Username=username,
                     MessageAction="SUPPRESS",
-                    UserAttributes=[{"Name": "preferred_username", "Value": name}] if name else [])
+                    UserAttributes=_cc_attrs)  # v45-coach-email
                 asub = next(a["Value"] for a in u["User"]["Attributes"] if a["Name"] == "sub")
             except IDP.exceptions.UsernameExistsException:
                 g = IDP.admin_get_user(UserPoolId=POOL_ID, Username=username)
                 asub = next(a["Value"] for a in g["UserAttributes"] if a["Name"] == "sub")
+                if _cc_email:  # v45-coach-email exists-path
+                    try:
+                        IDP.admin_update_user_attributes(UserPoolId=POOL_ID, Username=username,
+                            UserAttributes=[{"Name": "email", "Value": _cc_email},
+                                            {"Name": "email_verified", "Value": "true"}])
+                    except Exception as e:
+                        print(f"v45 exists-path email update failed: {e}")
             # void older unredeemed invites for this athlete - one live key per door
             old_inv = TABLE.scan(FilterExpression="itemType = :t AND username = :u AND #us = :f",
                 ExpressionAttributeNames={"#us": "used"},
