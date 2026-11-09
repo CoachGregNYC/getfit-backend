@@ -239,7 +239,7 @@ body.feed-mode .abar{display:flex}
   <div class="sidefoot">
     <div class="who" id="who"></div>
     <button onclick="signOutDash()">Sign out</button>
-    <div>v5.2.0</div>
+    <div>v5.3.0</div>
   </div>
 </aside>
 <div class="main">
@@ -938,6 +938,7 @@ function renderMiniProfile(){
     ["Email",p.email?`<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`:"—"],
     ["Nickname",esc(p.nickname||"—")],
     ["Push device",p.endpointArn?"✓ registered":"— none yet"],
+    ["Integrations",integrationsRow(v)],   // v5.3: Strava / WHOOP link status from /coach/athletes/all
     ["Status",ARCH.has(v)?"Archived":"Active"],
     ["Photo",photoRow(v)],
     ["App",appRow(v)],
@@ -946,6 +947,13 @@ function renderMiniProfile(){
   profCard.innerHTML=rows.map(r=>`<b>${r[0]}</b><span>${r[1]}</span>`).join("");
   profCard.className="prof";
   profCard.style.display="grid";
+}
+function integrationsRow(sub){   // v5.3: Strava / WHOOP pills (athleteApi v61)
+  const a=ALLATH.find(x=>x.sub===sub)||{};
+  const pill=(label,on,when,color)=>on
+    ?`<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:${color};color:#fff;font-size:12px;font-weight:600;margin-right:8px">${label} ✓ <span style="font-weight:400;opacity:.85">${when?"since "+esc(when):""}</span></span>`
+    :`<span style="display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #c9d8e8;color:#6b7a90;font-size:12px;margin-right:8px">${label} — not connected</span>`;
+  return pill("Strava",a.stravaLinked,a.stravaConnectedAt,"#FC4C02")+pill("WHOOP",a.whoopLinked,a.whoopConnectedAt,"#1B2A4A");
 }
 function photoRow(sub){   // v5.2: athlete photo, coach can upload one
   const a=ALLATH.find(x=>x.sub===sub)||{};
@@ -1038,7 +1046,7 @@ async function _setArchive(sub,arch){
 }
 function archiveCurrent(){setArchive(athlete.value,true)}
 async function newInvite(){
-  const u=UNAMES[athlete.value];
+  const u=UNAMES[athlete.value]||(ALLATH.find(x=>x.sub===athlete.value)||{}).username;   // v5.3: self-signup accounts have no username on PROFILE
   if(!u){alert("no username on file for this athlete");return}
   const nm=names[athlete.value]||u;
   if(!confirm(`Generate a NEW invite code for ${nm}?\n\nAny older unused codes are voided. When they redeem it, they pick a fresh password - use this for lost codes or forgotten passwords.`))return;
