@@ -1557,9 +1557,15 @@ def lambda_handler(event, context):
                                            b.get("chosenWeekdays"), coach_managed=True, coach_sub=sub)
             return _resp(400, {"error": err}) if err else _resp(200, out)
         if rk == "GET /coach/plans":
-            r = TABLE.scan(FilterExpression="itemType = :t AND SK = :m",
-                ExpressionAttributeValues={":t": "PLAN", ":m": "META"})
-            plans = sorted(r.get("Items", []), key=lambda p: p.get("title",""))
+            # v62: paginate — a single scan page stops at ~1 MB and silently drops newer plans
+            items, kw = [], {"FilterExpression": "itemType = :t AND SK = :m",
+                             "ExpressionAttributeValues": {":t": "PLAN", ":m": "META"}}
+            while True:
+                r = TABLE.scan(**kw)
+                items += r.get("Items", [])
+                if "LastEvaluatedKey" not in r: break
+                kw["ExclusiveStartKey"] = r["LastEvaluatedKey"]
+            plans = sorted(items, key=lambda p: p.get("title",""))
             return _resp(200, {"plans": [{
                 "planId": p["planId"], "title": p["title"],
                 "category": p.get("category","run"), "durationWeeks": p.get("durationWeeks",0),
