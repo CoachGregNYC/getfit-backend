@@ -116,45 +116,157 @@ def _swim_section(line):
         if low.startswith(key): return sec
     return None
 
+MULTI_CATEGORIES = ("swim", "hybrid", "strength")
+SECTION_PREFIXES = (("warm", "warmup"), ("post", "postwork"), ("cool", "postwork"),
+                    ("workout", "workout"), ("main", "workout"), ("further", "workout"),
+                    ("finisher", "workout"), ("accessory", "workout"), ("core", "workout"))
+BODYWEIGHT_MOVES = ("pull up", "pull-up", "pullup", "chin up", "chin-up", "dip", "push up",
+                    "push-up", "pushup", "hanging knee raise", "hanging leg raise", "plank",
+                    "mountain climber", "pallof", "dead bug", "bird dog", "hollow", "sit up",
+                    "sit-up", "burpee", "air squat", "glute bridge", "pistol", "l-sit")
+_UNITS = r"(m|meters?|y|yd|yds|yards?|mile|miles|k|km)"
+_SKIP_LINE = re.compile(r"^(why|note|notes|total|pace|focus|cue|cues)\s*[:\u2014-]", re.I)
+
+def _split_section_prefix(line):
+    """'Warm Up: 400 easy' -> ('warmup', '400 easy'); 'Main Set' -> ('workout', '');
+    'Incline Dumbbell Press 4 x 6' -> (None, line)."""
+    low = line.lower()
+    for key, sec in SECTION_PREFIXES:
+        if low.startswith(key):
+            head, _, rest = line.partition(":")
+            if _ == "":                       # no colon: whole short line is a header
+                return (sec, "") if len(line) <= 24 else (None, line)
+            if len(head) <= 24:
+                return sec, rest.strip()
+    return None, line
+
+def _first_keyword(text):
+    m = re.match(r"\s*([A-Z]{3,})\s*\u2014", text)
+    return m.group(1).lower() if m else ""
+
+def _rest_seconds(low):
+    """'15 sec rest' | 'rest 2 min' | 'with 90 sec rest' | 'w/ 2 min' -> seconds or None."""
+    m = re.search(r"(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?|s)\s*(?:of\s*)?rest\b", low)
+    if not m:
+        m = re.search(r"(?:rest|with|w/)\s*:?\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?|s)\b", low)
+    if not m: return None
+    return int(m.group(1)) * (60 if m.group(2).startswith("min") else 1)
+
+def _lift_line(line):
+    """'E) Cable Lateral Raise: 3 sets x 12-15 reps' -> dict or None."""
+    body = re.sub(r"^[A-Za-z]\)\s*", "", line).strip()
+    m = re.match(r"^(?P<mv>[A-Za-z][^\d@]*?)\s*[:\u2014-]?\s*(?P<sets>\d+)\s*(?:sets?\s*)?[x\u00d7]\s*(?P<r1>\d+)"
+                 r"(?:\s*[-\u2013]\s*(?P<r2>\d+))?\s*(?:reps?)?(?P<tail>.*)$", body, re.I)
+    if not m: return None
+    tail = m.group("tail").strip()
+    if re.match(r"^" + _UNITS + r"\b", tail, re.I): return None            # it's a distance set
+    if re.match(r"^(sec|secs|seconds?|min|mins|minutes?)\b", tail, re.I): return None  # timed set
+    mv = m.group("mv").strip(" :\u2014-")
+    if not mv or mv.lower() in ("core", "workout", "accessory", "finisher"):
+        # movement written after the reps: 'Core: 3 sets x 15 Hanging Knee Raises'
+        tail_mv = re.split(r"[@,(]|\b(?:with|w/|rest)\b", tail, 1)[0].strip(" :\u2014-")
+        tail_mv = re.sub(r"^(?:each\s+\w+\s*)", "", tail_mv).strip()
+        if not tail_mv: return None
+        mv = tail_mv
+    p = {"movement": mv, "sets": int(m.group("sets")), "reps": int(m.group("r1"))}
+    low = body.lower()
+    pm = re.search(r"@\s*(\d+)\s*%\s*(?:of\s*)?([^,\n(]+)", body, re.I)
+    if pm:
+        p["intensity"] = {"kind": "percentBenchmark", "value": Decimal(pm.group(1)),
+                          "benchmarkRef": norm_ref(pm.group(2))}
+    elif "bodyweight" in low or re.search(r"\bbw\b", low) or any(b in mv.lower() for b in BODYWEIGHT_MOVES):
+        p["intensity"] = {"kind": "bodyweight"}
+    rs = _rest_seconds(low)
+    if rs: p["restSeconds"] = rs
+    return p
+
+def _timed_set_line(line):
+    """'G) Core: 3 sets x 30 sec Mountain Climber' -> sets + durationSeconds."""
+    body = re.sub(r"^[A-Za-z]\)\s*", "", line)
+    m = re.search(r"(\d+)\s*(?:sets?\s*)?[x\u00d7]\s*(\d+)\s*(sec|secs|seconds?|min|mins|minutes?)\b", body, re.I)
+    if not m: return None
+    n = int(m.group(2)); u = m.group(3).lower()
+    mv = re.sub(r".*?(sec|secs|seconds?|min|mins|minutes?)\b\s*", "", body, count=1, flags=re.I).strip(" :\u2014-")
+    if not mv:
+        mv = re.sub(r"\s*\d+\s*(?:sets?\s*)?[x\u00d7].*$", "", body).strip(" :\u2014-") or "Hold"
+    return {"movement": mv, "sets": int(m.group(1)), "durationSeconds": n * (60 if u.startswith("min") else 1)}
+
+def _piece_line(line, section, default_move, category):
+    """One prescription for a swim/run/lift line. Returns dict (may be annotation-only)."""
+    p = {"section": section, "rawText": line}
+    low = line.lower()
+    if _SKIP_LINE.match(line) or line.startswith("*") or re.fullmatch(r"\d+\s*(rounds?|sets?)\b.*", low):
+        p["movement"] = default_move; return p
+    lift = _lift_line(line) if category != "swim" else None
+    if lift:
+        p.update(lift); return p
+    timed = _timed_set_line(line) if category != "swim" else None
+    if timed:
+        p.update(timed); return p
+    p["movement"] = default_move
+    body = re.sub(r"^\d+\s*[-\u2013]\s*\d+\s*\.\s*", "", line)
+    body = re.sub(r"^[A-Za-z]\)\s*", "", body)
+    # N x <distance>[unit]
+    m = re.search(r"(\d+)\s*[x\u00d7]\s*(\d+(?:\.\d+)?)\s*" + _UNITS + r"?\b", body, re.I)
+    if m:
+        p["sets"] = int(m.group(1)); d = float(m.group(2)); u = (m.group(3) or "").lower()
+        if "mile" in u: d = d * 1609.344
+        elif u in ("k", "km"): d = d * 1000
+        p["distanceMeters"] = Decimal(str(d))
+    else:
+        # bare leading distance: '400 easy' (swim) or '400m easy' / '1 mile easy'
+        m2 = re.match(r"^(\d+(?:,\d{3})*)\s*" + _UNITS + r"?\b(?!\s*\.)", body, re.I)
+        if m2 and (category == "swim" or m2.group(2)):
+            d = float(m2.group(1).replace(",", "")); u = (m2.group(2) or "").lower()
+            if "mile" in u: d = d * 1609.344
+            elif u in ("k", "km"): d = d * 1000
+            p["sets"] = 1; p["distanceMeters"] = Decimal(str(d))
+    # tempo / timed continuous: '25 min tempo', '60 min easy', '60-90 min'
+    if "durationSeconds" not in p and "distanceMeters" not in p:
+        m = re.search(r"(\d+)\s*(?:[-\u2013]\s*\d+\s*)?min(?:ute)?s?\b", low)
+        if m: p["durationSeconds"] = int(m.group(1)) * 60
+    # send-off / interval
+    m = re.search(r"@\s*(\d+):(\d{2})", body)
+    if m: p["intervalSeconds"] = int(m.group(1)) * 60 + int(m.group(2))
+    # rest in min or sec, number-first or word-first
+    rs = _rest_seconds(low)
+    if rs: p["restSeconds"] = rs
+    # pace
+    m = re.search(r"@\s*(\d+)\s*%\s*(?:of\s*)?([^,\n(]+)", line, re.I)
+    if m:
+        p["intensity"] = {"kind": "percentBenchmark", "value": Decimal(m.group(1)), "benchmarkRef": norm_ref(m.group(2))}
+    else:
+        m = re.search(r"@\s*([^,\n(]+?)\s+pace", line, re.I)
+        if m: p["intensity"] = {"kind": "percentBenchmark", "value": Decimal(100), "benchmarkRef": norm_ref(m.group(1))}
+    if "for time" in low: p["forTime"] = True
+    return p
+
 def parse_cell_multi(text, category=None):
-    """Swim plans: one prescription per line, tagged with its section.
-    warmup/postwork = done-or-not; workout = per-piece logging."""
-    if (category or "").lower() != "swim":
+    """Swim, hybrid and strength plans: one prescription per line, tagged with its section.
+    warmup/postwork = done-or-not; workout = per-piece logging (time, distance or weight/reps)."""
+    cat = (category or "").lower()
+    if cat not in MULTI_CATEGORIES:
         return [parse_cell(text)]
+    kw = _first_keyword(text)
+    default_move = "Swim" if (cat == "swim" or kw == "swim") else ("Run" if kw == "run" else "Run")
     out, section = [], "workout"
-    for raw in str(text).splitlines():
-        line = raw.strip()
-        if not line: continue
-        sec = _swim_section(line)
+    lines = [l.strip() for l in str(text).splitlines() if l.strip()]
+    if lines and re.match(r"^[A-Z]{3,}\s*\u2014", lines[0]):
+        lines = lines[1:]                      # 'SWIM \u2014 Threshold' title line is not a piece
+    for line in lines:
+        sec, rest = _split_section_prefix(line)
         if sec is not None:
-            section = sec; continue
+            section = sec
+            if not rest: continue
+            line = rest
         low = line.lower()
         m = re.fullmatch(r"rest\s*:?\s*(\d+)\s*(min(?:ute)?s?|sec(?:ond)?s?|s)?\.?", low)
         if m:
             secs = int(m.group(1)) * (60 if (m.group(2) or "").startswith("min") else 1)
             if out: out[-1]["restSeconds"] = secs
             continue
-        p = {"order": len(out), "movement": "Swim", "section": section, "rawText": line}
-        if re.fullmatch(r"\d+\s*(rounds?|sets?)\b.*", low) or line.startswith("*"):
-            out.append(p); continue  # structural / annotation: no numbers
-        body = re.sub(r"^\d+\s*[-\u2013]\s*\d+\s*\.\s*", "", line)
-        m = re.search(r"(\d+)\s*[x\u00d7]\s*(\d+)", body)
-        if m:
-            p["sets"] = int(m.group(1)); p["distanceMeters"] = Decimal(m.group(2))
-        else:
-            m2 = re.match(r"^(\d+(?:,\d{3})*)\b(?!\s*\.)", body)
-            if m2: p["sets"] = 1; p["distanceMeters"] = Decimal(m2.group(1).replace(",", ""))
-        m = re.search(r"@\s*(\d+):(\d{2})", body)
-        if m: p["intervalSeconds"] = int(m.group(1)) * 60 + int(m.group(2))
-        else:
-            m = re.search(r"@\s*(\d+)\s*min\b", body, re.I)
-            if m: p["intervalSeconds"] = int(m.group(1)) * 60
-        m = re.search(r"rest\s*:?\s*(\d+)\s*min", low)
-        if m: p["restSeconds"] = int(m.group(1)) * 60
-        else:
-            m = re.search(r"rest\s*:(\d+)\b", low)
-            if m: p["restSeconds"] = int(m.group(1))
-        if "for time" in low: p["forTime"] = True
+        p = _piece_line(line, section, default_move, cat)
+        p["order"] = len(out)
         out.append(p)
     return out or [parse_cell(text)]
 
@@ -1557,15 +1669,9 @@ def lambda_handler(event, context):
                                            b.get("chosenWeekdays"), coach_managed=True, coach_sub=sub)
             return _resp(400, {"error": err}) if err else _resp(200, out)
         if rk == "GET /coach/plans":
-            # v62: paginate — a single scan page stops at ~1 MB and silently drops newer plans
-            items, kw = [], {"FilterExpression": "itemType = :t AND SK = :m",
-                             "ExpressionAttributeValues": {":t": "PLAN", ":m": "META"}}
-            while True:
-                r = TABLE.scan(**kw)
-                items += r.get("Items", [])
-                if "LastEvaluatedKey" not in r: break
-                kw["ExclusiveStartKey"] = r["LastEvaluatedKey"]
-            plans = sorted(items, key=lambda p: p.get("title",""))
+            r = TABLE.scan(FilterExpression="itemType = :t AND SK = :m",
+                ExpressionAttributeValues={":t": "PLAN", ":m": "META"})
+            plans = sorted(r.get("Items", []), key=lambda p: p.get("title",""))
             return _resp(200, {"plans": [{
                 "planId": p["planId"], "title": p["title"],
                 "category": p.get("category","run"), "durationWeeks": p.get("durationWeeks",0),
