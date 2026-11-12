@@ -391,7 +391,7 @@ def parse_plan_csv(csv_text, category=None):
                 sessions.append(s)
     return sessions, week, floating
 def write_plan(title, category, author, publish, csv_text):
-    if "swim" in title.lower(): category = "swim"
+    if "swim" in title.lower() and not category: category = "swim"
     sessions, weeks, floating = parse_plan_csv(csv_text, category)
     if not sessions: return None, "no sessions parsed - check header row"
     plan_id = str(uuid.uuid4())

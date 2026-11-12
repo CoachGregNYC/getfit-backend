@@ -30,7 +30,8 @@ def list_plans():
               "accessModel": it.get("accessModel", "oneTime"),
               "priceMonthly": it.get("priceMonthly"),
               "priceOneTime": it.get("priceOneTime"),
-              "slotLabels": it.get("slotLabels")}
+              "slotLabels": it.get("slotLabels"),
+              "shelf": it.get("shelf")}
              for it in r.get("Items", [])]
     plans.sort(key=lambda p: p["title"])
     return _resp(200, {"plans": plans})
